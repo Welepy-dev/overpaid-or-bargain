@@ -7,6 +7,8 @@ fora das 5 grandes.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pandas as pd
 import soccerdata as sd
 
@@ -18,7 +20,10 @@ def fetch_ratings(cfg: Config, seasons: list[int]) -> pd.DataFrame:
     frames = []
     for s in seasons:
         when = f"{s}-{cfg.clubelo_reference_month_day}"
-        df = reader.read_by_date(when).reset_index()
+        # Com texto, o soccerdata converte meia-noite local para UTC e, a leste
+        # de Greenwich, pede o dia anterior; um datetime já em UTC evita isso.
+        day = datetime.strptime(when, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        df = reader.read_by_date(day).reset_index()
         df["summer"] = s
         df["reference_date"] = when
         frames.append(df)

@@ -32,7 +32,7 @@ def test_parse_league_transfers():
     df = tm.parse_league_transfers(fixture_text("tm_league_transfers.html"), "ENG", 2026)
     assert list(df.columns) == tm.LEAGUE_TRANSFER_COLUMNS
     arrivals = df[df["direction"] == "in"].set_index("player_id")
-    assert set(arrivals.index) == {1001, 1002, 1003, 1004, 1005}
+    assert set(arrivals.index) == {1001, 1002, 1003, 1004, 1005, 59016}
     joao = arrivals.loc[1001]
     assert joao["club_id"] == 11 and joao["club_name"] == "Arsenal FC"
     assert joao["player_name"] == "João Silva"
@@ -42,6 +42,8 @@ def test_parse_league_transfers():
     assert joao["other_club_country"] == "Portugal"
     assert joao["fee"] == 70_000_000 and joao["tm_transfer_id"] == 5001
     assert arrivals.loc[1003, "transfer_type"] == "loan"
+    alaba = arrivals.loc[59016]
+    assert alaba["transfer_type"] == "free" and alaba["other_club_name"] == "Without Club"
     out = df[df["direction"] == "out"]
     assert set(out["player_id"]) == {1005, 1006}
     assert set(out["club_id"]) == {11, 631}

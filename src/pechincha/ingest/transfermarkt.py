@@ -84,6 +84,7 @@ def classify_fee(text: str) -> dict:
 _PLAYER_ID = re.compile(r"/spieler/(\d+)")
 _CLUB_ID = re.compile(r"/verein/(\d+)")
 _TRANSFER_ID = re.compile(r"/transfer_id/(\d+)")
+WITHOUT_CLUB_ID = 515  # "Without Club" (vereinslos)
 
 
 def league_transfers_url(league: League, season: int, window: str = "s") -> str:
@@ -101,7 +102,8 @@ def parse_league_transfers(html: str, league_key: str, season: int, window: str 
         club_link = _club_header_link(box)
         if club_link is None:
             continue
-        club_name = club_link.get("title") or club_link.get_text(strip=True)
+        # O texto do link é o nome; o title vem por vezes estragado ("Arsenal FCArray").
+        club_name = club_link.get_text(strip=True) or club_link.get("title")
         club_id = _int(_CLUB_ID, club_link.get("href"))
         for table in box.find_all("table"):
             direction = _table_direction(table)
@@ -197,6 +199,9 @@ def _parse_transfer_row(tr) -> dict | None:
         "tm_transfer_id": _int(_TRANSFER_ID, fee_a["href"]) if fee_a is not None else None,
     }
     rec.update(classify_fee(fee_td.get_text(" ", strip=True)))
+    if rec["transfer_type"] == "unknown" and rec["other_club_id"] == WITHOUT_CLUB_ID:
+        # Jogador sem clube: o Transfermarkt mostra "-" em vez de "free transfer".
+        rec.update(transfer_type="free", fee=0.0, fee_currency=None)
     return rec
 
 

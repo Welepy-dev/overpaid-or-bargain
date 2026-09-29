@@ -7,17 +7,18 @@ possession). O soccerdata 1.9 só lê ``standard``, ``shooting``,
 restantes métricas defensivas vêm do Sofascore (ver ``sofascore.py``).
 
 O FBref exige um browser (Chromium, via seleniumbase); o caminho pode ser
-indicado com a variável de ambiente ``PECHINCHA_BROWSER``.
+indicado com a variável de ambiente ``PECHINCHA_BROWSER``. Se o Cloudflare
+mostrar um captcha, correr com ``PECHINCHA_HEADLESS=0`` (abre uma janela).
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 
 import pandas as pd
 import soccerdata as sd
+import soccerdata.fbref as sd_fbref
 
 from ..config import Config
 from ._seasons import soccerdata_season
@@ -26,6 +27,10 @@ log = logging.getLogger(__name__)
 
 STAT_TYPES = ["standard", "shooting", "playing_time", "misc"]
 
+# O FBref passou a escrever "Bundesliga" (sem "Fußball-") na coluna Comp; sem
+# isto o soccerdata 1.9 descarta as linhas da Bundesliga.
+sd_fbref.BIG_FIVE_DICT.setdefault("Bundesliga", "GER-Bundesliga")
+
 
 def fetch_player_seasons(cfg: Config, seasons: list[int]) -> dict[str, pd.DataFrame]:
     browser = os.environ.get("PECHINCHA_BROWSER")
@@ -33,8 +38,10 @@ def fetch_player_seasons(cfg: Config, seasons: list[int]) -> dict[str, pd.DataFr
         leagues="Big 5 European Leagues Combined",
         seasons=[soccerdata_season(s) for s in seasons],
         data_dir=cfg.cache_dir / "fbref",
-        path_to_browser=Path(browser) if browser else None,
-        headless=True,
+        path_to_browser=browser or None,  # o seleniumbase quer texto, não Path
+        # O Cloudflare do FBref costuma bloquear o modo headless; com
+        # PECHINCHA_HEADLESS=0 abre-se uma janela e o soccerdata resolve o captcha.
+        headless=os.environ.get("PECHINCHA_HEADLESS", "1") != "0",
     )
     out = {}
     for stat in STAT_TYPES:
