@@ -1,4 +1,100 @@
-{"uniqueTournamentSeasons":[
- {"uniqueTournament":{"id":238,"name":"Liga Portugal Betclic"},"seasons":[{"id":77,"year":"25/26"},{"id":66,"year":"24/25"}]},
- {"uniqueTournament":{"id":7,"name":"UEFA Champions League"},"seasons":[{"id":88,"year":"25/26"}]}
-]}
+{
+ "uniqueTournamentSeasons": [
+  {
+   "uniqueTournament": {
+    "id": 26,
+    "name": "U21 Euro Qualification"
+   },
+   "seasons": [
+    {
+     "id": 72382,
+     "year": "25/26"
+    }
+   ]
+  },
+  {
+   "uniqueTournament": {
+    "id": 17,
+    "name": "Premier League"
+   },
+   "seasons": [
+    {
+     "id": 96668,
+     "year": "26/27"
+    }
+   ]
+  },
+  {
+   "uniqueTournament": {
+    "id": 238,
+    "name": "Liga Portugal Betclic"
+   },
+   "seasons": [
+    {
+     "id": 77806,
+     "year": "25/26"
+    },
+    {
+     "id": 63670,
+     "year": "24/25"
+    }
+   ]
+  },
+  {
+   "uniqueTournament": {
+    "id": 7,
+    "name": "UEFA Champions League"
+   },
+   "seasons": [
+    {
+     "id": 76953,
+     "year": "25/26"
+    },
+    {
+     "id": 61644,
+     "year": "24/25"
+    }
+   ]
+  },
+  {
+   "uniqueTournament": {
+    "id": 345,
+    "name": "Supertaça"
+   },
+   "seasons": [
+    {
+     "id": 76982,
+     "year": "2025"
+    },
+    {
+     "id": 61202,
+     "year": "24/25"
+    }
+   ]
+  },
+  {
+   "uniqueTournament": {
+    "id": 454,
+    "name": "U21 European Championship"
+   },
+   "seasons": [
+    {
+     "id": 69426,
+     "year": "2025"
+    }
+   ]
+  },
+  {
+   "uniqueTournament": {
+    "id": 429,
+    "name": "U17 European Championship"
+   },
+   "seasons": [
+    {
+     "id": 59575,
+     "year": "2024"
+    }
+   ]
+  }
+ ]
+}

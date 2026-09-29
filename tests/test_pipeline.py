@@ -19,6 +19,10 @@ def fake_text(self, url, max_age_hours=None, suffix=".html"):
 
 
 def fake_json(self, url, max_age_hours=None):
+    births = {"/player/900": 1046736000, "/player/901": 946684800}  # 2003-03-04, 2000-01-01
+    for key, ts in births.items():
+        if url.endswith(key):
+            return {"player": {"id": int(key.rsplit("/", 1)[1]), "dateOfBirthTimestamp": ts}}
     routes = {
         "transferHistory/list/1001": "tm_transfer_history_1001.json",
         "marketValueDevelopment/graph/1001": "tm_market_values_1001.json",
@@ -58,8 +62,8 @@ def test_transfers_details_and_sofascore(cfg):
     matches = pd.read_parquet(out / "sofascore_matches.parquet")
     assert matches.set_index("player_id").loc[1001, "sofascore_id"] == 900
     stats = pd.read_parquet(out / "sofascore_player_seasons.parquet")
-    assert set(stats["tournament_id"]) == {238, 7}
-    assert stats["expectedGoals"].iloc[0] == 17.4
+    assert set(stats["tournament_id"]) == {238, 7, 345, 26, 454}
+    assert stats["expectedGoals"].iloc[0] == 1.6623 and stats["team_name"].iloc[0] == "Sporting CP"
 
 
 def test_weekly_run_keeps_history(cfg):

@@ -20,20 +20,22 @@ from urllib.parse import quote
 import pandas as pd
 
 from ..config import Config
-from ..http import CachedFetcher, FetchError
+from ..http import BrowserFetcher, CachedFetcher, FetchError
 from ..progress import progress
 
 log = logging.getLogger(__name__)
 
 API = "https://api.sofascore.com/api/v1"
+# Candidatos da pesquisa cujo perfil se abre para comparar a data de nascimento.
+MAX_CANDIDATES = 5
 
 
-def fetcher(cfg: Config) -> CachedFetcher:
+def fetcher(cfg: Config) -> BrowserFetcher:
+    # A API devolve 403 a clientes que não são browsers; os pedidos vão por um Chromium.
     h = cfg.http
-    return CachedFetcher(
-        cfg.cache_dir, "sofascore",
+    return BrowserFetcher(
+        cfg.cache_dir, "sofascore", home="https://www.sofascore.com/",
         min_interval=h["min_interval_seconds"], timeout=h["timeout_seconds"], max_retries=h["max_retries"],
-        headers={"Accept": "application/json", "Referer": "https://www.sofascore.com/", "Origin": "https://www.sofascore.com"},
     )
 
 
@@ -70,6 +72,23 @@ def parse_search(data: dict) -> list[dict]:
             }
         )
     return out
+
+
+def parse_player_birth(data: dict) -> date | None:
+    """Data de nascimento de ``/player/{id}`` (a pesquisa não a inclui)."""
+    ts = (data.get("player") or {}).get("dateOfBirthTimestamp")
+    return datetime.fromtimestamp(ts, tz=timezone.utc).date() if ts is not None else None
+
+
+def parse_statistics(data: dict) -> dict:
+    """Estatísticas de uma competição/época, só valores simples, mais a equipa.
+
+    ``team_national`` separa jogos por seleções (sub-21 incluídas) dos de clube.
+    """
+    stats = {k: v for k, v in (data.get("statistics") or {}).items() if not isinstance(v, (dict, list))}
+    stats.pop("id", None)
+    team = data.get("team") or {}
+    return {"team_name": team.get("name"), "team_national": team.get("national"), **stats}
 
 
 def pick_candidate(candidates: list[dict], name: str, dob: date | None, club: str | None = None) -> dict | None:
@@ -113,7 +132,16 @@ def fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher | None = 
     Devolve (correspondências, estatísticas). As correspondências registam
     também os jogadores não encontrados, para revisão manual na Fase 2.
     """
+    own = f is None
     f = f or fetcher(cfg)
+    try:
+        return _fetch_players(cfg, players, f)
+    finally:
+        if own:
+            f.close()
+
+
+def _fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher) -> tuple[pd.DataFrame, pd.DataFrame]:
     matches, stats = [], []
     for p in progress(players.itertuples(index=False), "Sofascore jogadores", total=len(players)):
         dob = p.date_of_birth if isinstance(p.date_of_birth, date) else None
@@ -121,6 +149,10 @@ def fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher | None = 
         rec = {"player_id": p.player_id, "summer": p.season, "player_name": p.player_name, "sofascore_id": None, "match_status": "not_found"}
         try:
             found = parse_search(f.get_json(f"{API}/search/all?q={quote(p.player_name)}&page=0"))
+            if dob is not None:
+                for c in found[:MAX_CANDIDATES]:
+                    if c["date_of_birth"] is None:
+                        c["date_of_birth"] = parse_player_birth(f.get_json(f"{API}/player/{c['sofascore_id']}"))
             cand = pick_candidate(found, p.player_name, dob, p.other_club_name)
             if cand is None:
                 rec["match_status"] = "ambiguous" if found else "not_found"
@@ -134,7 +166,7 @@ def fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher | None = 
                     body = f.get_json(url, max_age_hours=live)
                 except FetchError:
                     continue
-                stats.append({"player_id": p.player_id, "sofascore_id": cand["sofascore_id"], "summer": p.season, **s, **(body.get("statistics") or {})})
+                stats.append({"player_id": p.player_id, "sofascore_id": cand["sofascore_id"], "summer": p.season, **s, **parse_statistics(body)})
         except FetchError as exc:
             log.warning("Sofascore falhou para %s: %s", p.player_name, exc)
             rec["match_status"] = "error"

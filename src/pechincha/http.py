@@ -10,7 +10,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
+import shutil
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -79,6 +81,9 @@ class CachedFetcher:
     def get_json(self, url: str, max_age_hours: float | None = None):
         return json.loads(self.get_text(url, max_age_hours=max_age_hours, suffix=".json"))
 
+    def close(self) -> None:
+        self.session.close()
+
     def _download(self, url: str) -> str:
         host = urlparse(url).netloc
         last_error: Exception | None = None
@@ -100,6 +105,86 @@ class CachedFetcher:
             log.info("Tentativa %d/%d falhou para %s: %s", attempt, self.max_retries, url, last_error)
             time.sleep(self.min_interval * 2**attempt)
         raise FetchError(str(last_error))
+
+
+def find_browser() -> str | None:
+    """Chromium/Chrome para o seleniumbase: ``PECHINCHA_BROWSER``, o PATH ou o do Playwright."""
+    if os.environ.get("PECHINCHA_BROWSER"):
+        return os.environ["PECHINCHA_BROWSER"]
+    for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "chrome"):
+        if found := shutil.which(name):
+            return found
+    playwright = sorted(Path.home().glob(".cache/ms-playwright/chromium-*/chrome-*/chrome"))
+    return str(playwright[-1]) if playwright else None
+
+
+def headless() -> bool:
+    return os.environ.get("PECHINCHA_HEADLESS", "1") != "0"
+
+
+class BrowserFetcher(CachedFetcher):
+    """Igual ao CachedFetcher, mas descarrega com ``fetch()`` dentro de um Chromium.
+
+    Para APIs que recusam clientes que não são browsers (ex.: Sofascore devolve
+    403 a requests/curl). Abre ``home`` uma vez para ter os cookies do site. O
+    browser vem de ``find_browser``; ``PECHINCHA_HEADLESS=0`` abre uma janela visível.
+    """
+
+    _SCRIPT = (
+        "const done = arguments[arguments.length - 1];"
+        "fetch(arguments[0])"
+        ".then(r => r.text().then(t => done([r.status, t])))"
+        ".catch(e => done([0, String(e)]));"
+    )
+
+    def __init__(self, cache_dir: Path, source: str, home: str, **kwargs):
+        super().__init__(cache_dir, source, **kwargs)
+        self.home = home
+        self._driver = None
+
+    def _browser(self):
+        if self._driver is None:
+            import seleniumbase as sb
+
+            self._driver = sb.Driver(
+                uc=True,
+                headless=headless(),
+                binary_location=find_browser(),
+            )
+            self._driver.set_script_timeout(self.timeout)
+            self._driver.get(self.home)
+        return self._driver
+
+    def _download(self, url: str) -> str:
+        host = urlparse(url).netloc
+        last_error: Exception | None = None
+        for attempt in range(1, self.max_retries + 1):
+            wait = self.min_interval - (time.monotonic() - self._last_request.get(host, 0.0))
+            if wait > 0:
+                time.sleep(wait)
+            self._last_request[host] = time.monotonic()
+            try:
+                status, body = self._browser().execute_async_script(self._SCRIPT, url)
+            except Exception as exc:  # o browser pode ter morrido: abre-se outro
+                last_error = exc
+                self.close()
+            else:
+                if status == 200:
+                    return body
+                if status == 404:
+                    raise FetchError(f"404 em {url}")
+                last_error = FetchError(f"HTTP {status} em {url}")
+            log.info("Tentativa %d/%d falhou para %s: %s", attempt, self.max_retries, url, last_error)
+            time.sleep(self.min_interval * 2**attempt)
+        raise FetchError(str(last_error))
+
+    def close(self) -> None:
+        if self._driver is not None:
+            try:
+                self._driver.quit()
+            except Exception:
+                pass
+            self._driver = None
 
 
 def _expired(path: Path, max_age_hours: float | None) -> bool:

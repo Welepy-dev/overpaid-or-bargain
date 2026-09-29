@@ -1,5 +1,52 @@
-{"results":[
- {"type":"player","entity":{"id":900,"name":"João Silva","team":{"name":"Benfica"},"dateOfBirthTimestamp":1046736000}},
- {"type":"player","entity":{"id":901,"name":"João Silva","team":{"name":"Santos"},"dateOfBirthTimestamp":946684800}},
- {"type":"team","entity":{"id":5,"name":"Silva FC"}}
-]}
+{
+ "results": [
+  {
+   "entity": {
+    "id": 900,
+    "name": "João Silva",
+    "slug": "joao-silva",
+    "team": {
+     "id": 3006,
+     "name": "Benfica",
+     "slug": "benfica",
+     "national": false
+    },
+    "position": "M",
+    "country": {
+     "alpha2": "PT",
+     "name": "Portugal"
+    }
+   },
+   "score": 1.0,
+   "type": "player"
+  },
+  {
+   "entity": {
+    "id": 901,
+    "name": "João Silva",
+    "slug": "joao-silva",
+    "team": {
+     "id": 1968,
+     "name": "Santos",
+     "slug": "santos",
+     "national": false
+    },
+    "position": "M",
+    "country": {
+     "alpha2": "PT",
+     "name": "Portugal"
+    }
+   },
+   "score": 0.9,
+   "type": "player"
+  },
+  {
+   "entity": {
+    "id": 5,
+    "name": "Silva FC"
+   },
+   "score": 0.1,
+   "type": "team"
+  }
+ ]
+}
