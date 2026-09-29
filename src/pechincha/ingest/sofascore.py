@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 
 API = "https://api.sofascore.com/api/v1"
 # Candidatos da pesquisa cujo perfil se abre para comparar a data de nascimento.
-MAX_CANDIDATES = 5
+MAX_CANDIDATES = 3
 
 
 def fetcher(cfg: Config) -> BrowserFetcher:
@@ -91,6 +91,13 @@ def parse_statistics(data: dict) -> dict:
     return {"team_name": team.get("name"), "team_national": team.get("national"), **stats}
 
 
+def likely_candidates(candidates: list[dict], name: str) -> list[dict]:
+    """Os primeiros candidatos com alguma palavra do nome em comum (cada um custa um pedido)."""
+    words = set(normalize_name(name).split())
+    same = [c for c in candidates if words & set(normalize_name(c["name"] or "").split())]
+    return (same or candidates)[:MAX_CANDIDATES]
+
+
 def pick_candidate(candidates: list[dict], name: str, dob: date | None, club: str | None = None) -> dict | None:
     """Escolhe o jogador certo entre os resultados da pesquisa.
 
@@ -150,7 +157,7 @@ def _fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher) -> tupl
         try:
             found = parse_search(f.get_json(f"{API}/search/all?q={quote(p.player_name)}&page=0"))
             if dob is not None:
-                for c in found[:MAX_CANDIDATES]:
+                for c in likely_candidates(found, p.player_name):
                     if c["date_of_birth"] is None:
                         c["date_of_birth"] = parse_player_birth(f.get_json(f"{API}/player/{c['sofascore_id']}"))
             cand = pick_candidate(found, p.player_name, dob, p.other_club_name)

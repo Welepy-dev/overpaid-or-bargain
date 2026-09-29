@@ -12,6 +12,11 @@ def test_search_has_no_birth_date_so_profile_is_needed():
     assert ss.parse_player_birth(fixture_json("sofascore_player.json")) == date(2007, 4, 30)
 
 
+def test_likely_candidates():
+    found = [{"name": n} for n in ["Other Guy", "João Silva", "Joao Pedro", "Silva", "J. Silva"]]
+    assert [c["name"] for c in ss.likely_candidates(found, "João Silva")] == ["João Silva", "Joao Pedro", "Silva"]
+
+
 def test_pick_by_birth_date():
     found = ss.parse_search(fixture_json("sofascore_search.json"))
     found[0]["date_of_birth"], found[1]["date_of_birth"] = date(2003, 3, 4), date(2000, 1, 1)
