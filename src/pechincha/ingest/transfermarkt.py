@@ -22,7 +22,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 from ..config import Config, League
-from ..http import CachedFetcher, FetchError
+from ..http import BlockedError, CachedFetcher, FetchError
 from ..progress import progress
 
 log = logging.getLogger(__name__)
@@ -320,7 +320,7 @@ def fetcher(cfg: Config) -> CachedFetcher:
     h = cfg.http
     return CachedFetcher(
         cfg.cache_dir, "transfermarkt",
-        min_interval=h["min_interval_seconds"], timeout=h["timeout_seconds"], max_retries=h["max_retries"],
+        min_interval=cfg.min_interval("transfermarkt"), timeout=h["timeout_seconds"], max_retries=h["max_retries"],
     )
 
 
@@ -349,6 +349,10 @@ def fetch_player_details(cfg: Config, player_ids: list[int], f: CachedFetcher | 
             hist.append(parse_transfer_history(f.get_json(transfer_history_url(pid), max_age_hours=live), pid))
             values.append(parse_market_values(f.get_json(market_value_url(pid), max_age_hours=live), pid))
             profiles.append(parse_profile(f.get_text(profile_url(pid), max_age_hours=live), pid))
+        except BlockedError:
+            # O que já foi descarregado fica em cache: voltar a correr retoma daqui.
+            log.error("Transfermarkt bloqueou os pedidos no jogador %s; tentar mais tarde.", pid)
+            raise
         except (FetchError, ValueError) as exc:
             log.warning("Jogador %s sem detalhes: %s", pid, exc)
     return (

@@ -31,6 +31,14 @@ class FetchError(RuntimeError):
     pass
 
 
+class BlockedError(FetchError):
+    """O site respondeu com uma página anti-bot: insistir só prolonga o bloqueio."""
+
+
+def _blocked(status: int, body: str) -> bool:
+    return status == 429 or (status in (403, 405) and "Human Verification" in body)
+
+
 class CachedFetcher:
     def __init__(
         self,
@@ -101,6 +109,8 @@ class CachedFetcher:
                     return resp.text
                 if resp.status_code == 404:
                     raise FetchError(f"404 em {url}")
+                if _blocked(resp.status_code, resp.text):
+                    raise BlockedError(f"HTTP {resp.status_code} (bloqueio anti-bot) em {url}")
                 last_error = FetchError(f"HTTP {resp.status_code} em {url}")
             log.info("Tentativa %d/%d falhou para %s: %s", attempt, self.max_retries, url, last_error)
             time.sleep(self.min_interval * 2**attempt)
@@ -173,6 +183,8 @@ class BrowserFetcher(CachedFetcher):
                     return body
                 if status == 404:
                     raise FetchError(f"404 em {url}")
+                if _blocked(status, body):
+                    raise BlockedError(f"HTTP {status} (bloqueio anti-bot) em {url}")
                 last_error = FetchError(f"HTTP {status} em {url}")
             log.info("Tentativa %d/%d falhou para %s: %s", attempt, self.max_retries, url, last_error)
             time.sleep(self.min_interval * 2**attempt)

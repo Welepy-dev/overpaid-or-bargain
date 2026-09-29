@@ -36,6 +36,10 @@ class Config:
     def interim_dir(self) -> Path:
         return self.root / "data" / "interim"
 
+    def min_interval(self, source: str) -> float:
+        """Intervalo entre pedidos de uma fonte (``http.min_interval_by_source`` ou o geral)."""
+        return self.http.get("min_interval_by_source", {}).get(source, self.http["min_interval_seconds"])
+
     @property
     def all_seasons(self) -> list[int]:
         return sorted(set(self.history_seasons) | {self.season})

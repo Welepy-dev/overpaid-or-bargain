@@ -41,6 +41,10 @@ clubelo_reference_month_day: "07-01"
 http:
   cache_dir: data/raw
   min_interval_seconds: 3.0    # intervalo mínimo entre pedidos ao mesmo domínio
+  min_interval_by_source:
+    # O Transfermarkt bloqueou o IP (AWS WAF, "Human Verification") ao fim de
+    # ~450 pedidos a 3 s; mais devagar para o histórico completo.
+    transfermarkt: 6.0
   timeout_seconds: 30
   max_retries: 3
   # Páginas que mudam (transferências da época corrente, estatísticas em curso)

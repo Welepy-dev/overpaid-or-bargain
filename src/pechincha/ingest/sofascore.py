@@ -20,7 +20,7 @@ from urllib.parse import quote
 import pandas as pd
 
 from ..config import Config
-from ..http import BrowserFetcher, CachedFetcher, FetchError
+from ..http import BlockedError, BrowserFetcher, CachedFetcher, FetchError
 from ..progress import progress
 
 log = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ def fetcher(cfg: Config) -> BrowserFetcher:
     h = cfg.http
     return BrowserFetcher(
         cfg.cache_dir, "sofascore", home="https://www.sofascore.com/",
-        min_interval=h["min_interval_seconds"], timeout=h["timeout_seconds"], max_retries=h["max_retries"],
+        min_interval=cfg.min_interval("sofascore"), timeout=h["timeout_seconds"], max_retries=h["max_retries"],
     )
 
 
@@ -174,6 +174,8 @@ def _fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher) -> tupl
                 except FetchError:
                     continue
                 stats.append({"player_id": p.player_id, "sofascore_id": cand["sofascore_id"], "summer": p.season, **s, **parse_statistics(body)})
+        except BlockedError:
+            raise
         except FetchError as exc:
             log.warning("Sofascore falhou para %s: %s", p.player_name, exc)
             rec["match_status"] = "error"
