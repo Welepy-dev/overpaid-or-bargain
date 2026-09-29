@@ -757,6 +757,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
     { name = "soccerdata" },
+    { name = "tqdm" },
 ]
 
 [package.dev-dependencies]
@@ -774,6 +775,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", specifier = ">=2.34.2" },
     { name = "soccerdata", specifier = ">=1.9.1" },
+    { name = "tqdm", specifier = ">=4.70.1" },
 ]
 
 [package.metadata.requires-dev]

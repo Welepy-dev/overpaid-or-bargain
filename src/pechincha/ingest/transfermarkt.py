@@ -23,6 +23,7 @@ from bs4 import BeautifulSoup
 
 from ..config import Config, League
 from ..http import CachedFetcher, FetchError
+from ..progress import progress
 
 log = logging.getLogger(__name__)
 
@@ -321,15 +322,14 @@ def fetcher(cfg: Config) -> CachedFetcher:
 def fetch_league_transfers(cfg: Config, seasons: list[int], f: CachedFetcher | None = None) -> pd.DataFrame:
     f = f or fetcher(cfg)
     frames = []
-    for season in seasons:
+    pages = [(s, lg) for s in seasons for lg in cfg.leagues]
+    for season, league in progress(pages, "Transfermarkt ligas"):
         live = cfg.http["live_max_age_hours"] if season >= cfg.season else None
-        for league in cfg.leagues:
-            url = league_transfers_url(league, season)
-            log.info("Transfermarkt %s %s", league.key, season)
-            df = parse_league_transfers(f.get_text(url, max_age_hours=live), league.key, season)
-            if df.empty:
-                log.warning("Nenhuma transferência lida em %s (página mudou?)", url)
-            frames.append(df)
+        url = league_transfers_url(league, season)
+        df = parse_league_transfers(f.get_text(url, max_age_hours=live), league.key, season)
+        if df.empty:
+            log.warning("Nenhuma transferência lida em %s (página mudou?)", url)
+        frames.append(df)
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=LEAGUE_TRANSFER_COLUMNS)
 
 
@@ -338,9 +338,8 @@ def fetch_player_details(cfg: Config, player_ids: list[int], f: CachedFetcher | 
     f = f or fetcher(cfg)
     live = cfg.http["live_max_age_hours"]
     hist, values, profiles = [], [], []
-    for i, pid in enumerate(sorted(set(int(p) for p in player_ids)), 1):
-        if i % 50 == 0:
-            log.info("Transfermarkt jogadores: %d/%d", i, len(player_ids))
+    ids = sorted(set(int(p) for p in player_ids))
+    for pid in progress(ids, "Transfermarkt jogadores"):
         try:
             hist.append(parse_transfer_history(f.get_json(transfer_history_url(pid), max_age_hours=live), pid))
             values.append(parse_market_values(f.get_json(market_value_url(pid), max_age_hours=live), pid))

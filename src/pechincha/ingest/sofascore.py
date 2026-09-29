@@ -21,6 +21,7 @@ import pandas as pd
 
 from ..config import Config
 from ..http import CachedFetcher, FetchError
+from ..progress import progress
 
 log = logging.getLogger(__name__)
 
@@ -114,7 +115,7 @@ def fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher | None = 
     """
     f = f or fetcher(cfg)
     matches, stats = [], []
-    for p in players.itertuples(index=False):
+    for p in progress(players.itertuples(index=False), "Sofascore jogadores", total=len(players)):
         dob = p.date_of_birth if isinstance(p.date_of_birth, date) else None
         live = cfg.http["live_max_age_hours"] if p.season >= cfg.season else None
         rec = {"player_id": p.player_id, "summer": p.season, "player_name": p.player_name, "sofascore_id": None, "match_status": "not_found"}

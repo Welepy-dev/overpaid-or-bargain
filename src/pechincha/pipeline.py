@@ -23,6 +23,7 @@ import pandas as pd
 
 from .config import Config
 from .ingest import clubelo, fbref, sofascore, transfermarkt, understat
+from .progress import progress
 
 log = logging.getLogger(__name__)
 
@@ -120,7 +121,8 @@ def run(cfg: Config, steps: list[str] | None = None, current_only: bool = False)
     """
     years = summers(cfg, current_only)
     failed = []
-    for step in steps or STEPS:
+    steps = steps or STEPS
+    for step in progress(steps, "Pipeline (passos)"):
         log.info("Passo %s (verões %s)", step, years)
         try:
             _STEP_FUNCS[step](cfg, years)
