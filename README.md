@@ -15,11 +15,14 @@ A data analytics project that evaluates the players of the 2026 summer transfer 
 - **Period:** Summer of 2026.
 - **Elligible players:** Every player **bought**, excluding loans and Goalkeepers.
 
-## Data sources (To be decided)
+## Data sources
 | Source        | Data                                             |
 |--------------|---------------------------------------------------|
-| Transfermarkt| Transfer Value, age, contract, market value       |
-| Understat    | xG, xA, xGChain, xGBuildup                        |
+| Transfermarkt| Transfer fee, age, contract, market value before the transfer, position, origin club |
+| Understat    | xG, xA, xGChain, xGBuildup, shots, key passes (top-5 leagues) |
+| FBref        | Defensive metrics still published (interceptions, tackles won, aerials, recoveries) |
+| Sofascore    | Season stats for players arriving from outside the top-5 leagues |
+| ClubElo      | Club strength on July 1st of each summer (league-strength adjustment) |
 
 ## Methodology (planned)
 
@@ -47,14 +50,33 @@ A data analytics project that evaluates the players of the 2026 summer transfer 
 - [ ] Phase 5 - Performance in the new team
 - [ ] Phase 6 - Dashboard and communication
 
-## Repository structure (current)
+## Data collection (phase 1)
+
+```bash
+uv sync
+uv run main.py collect                    # everything: summers 2019-2026
+uv run main.py collect --current-only     # weekly refresh: 2026/27 only
+uv run main.py collect --steps transfers tm_details   # selected steps
+uv run pytest                             # parser and pipeline tests (offline)
+```
+
+Steps: `transfers`, `tm_details`, `understat`, `fbref`, `clubelo`, `sofascore`.
+Settings (leagues, seasons, eligibility rules, request interval) live in `config.yaml`.
+Every downloaded page is cached in `data/raw/`; tables are written to `data/interim/` as parquet.
+A failing step is logged and the next steps still run. FBref needs Chromium (set `PECHINCHA_BROWSER` if it is not found).
+
+## Repository structure
 
 ```
 .
+├── config.yaml
 ├── main.py
+├── src/pechincha/
+│   ├── config.py, http.py, pipeline.py, cli.py
+│   └── ingest/          # transfermarkt, understat, fbref, clubelo, sofascore
+├── tests/               # offline tests with fixtures
+├── data/                # raw/ cache and interim/ tables (not in git)
 ├── notes.txt
 ├── pyproject.toml
-├── README.md
 └── uv.lock
 ```
-1 directory, 5 files

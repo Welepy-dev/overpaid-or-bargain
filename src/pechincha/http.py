@@ -1,0 +1,112 @@
+"""Cliente HTTP com cache em disco e intervalo entre pedidos.
+
+Cada resposta é guardada em ``data/raw/<fonte>/`` com o nome derivado do URL,
+para não repetir pedidos e para o pipeline continuar a correr se uma página
+mudar ou ficar indisponível (usa-se a última cópia guardada).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import re
+import time
+from pathlib import Path
+from urllib.parse import urlparse
+
+import requests
+
+log = logging.getLogger(__name__)
+
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/128.0 Safari/537.36"
+)
+
+
+class FetchError(RuntimeError):
+    pass
+
+
+class CachedFetcher:
+    def __init__(
+        self,
+        cache_dir: Path,
+        source: str,
+        min_interval: float = 3.0,
+        timeout: float = 30,
+        max_retries: int = 3,
+        headers: dict | None = None,
+        session: requests.Session | None = None,
+    ):
+        self.dir = Path(cache_dir) / source
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self.min_interval = min_interval
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.session = session or requests.Session()
+        self.session.headers.update({"User-Agent": USER_AGENT, "Accept-Language": "en-GB,en;q=0.9"})
+        if headers:
+            self.session.headers.update(headers)
+        self._last_request: dict[str, float] = {}
+
+    def cache_path(self, url: str, suffix: str) -> Path:
+        parsed = urlparse(url)
+        slug = re.sub(r"[^A-Za-z0-9]+", "_", parsed.path + "_" + parsed.query).strip("_")[-80:]
+        digest = hashlib.sha1(url.encode()).hexdigest()[:10]
+        return self.dir / f"{slug}_{digest}{suffix}"
+
+    def get_text(self, url: str, max_age_hours: float | None = None, suffix: str = ".html") -> str:
+        """Devolve o corpo da resposta, da cache se existir e não tiver expirado.
+
+        ``max_age_hours=None`` significa que a cópia em cache nunca expira.
+        Se o pedido falhar e houver cópia antiga, usa-se a cópia antiga.
+        """
+        path = self.cache_path(url, suffix)
+        if path.exists() and not _expired(path, max_age_hours):
+            return path.read_text(encoding="utf-8")
+        try:
+            body = self._download(url)
+        except FetchError:
+            if path.exists():
+                log.warning("Falha ao descarregar %s; a usar cópia em cache de %s", url, _mtime(path))
+                return path.read_text(encoding="utf-8")
+            raise
+        path.write_text(body, encoding="utf-8")
+        return body
+
+    def get_json(self, url: str, max_age_hours: float | None = None):
+        return json.loads(self.get_text(url, max_age_hours=max_age_hours, suffix=".json"))
+
+    def _download(self, url: str) -> str:
+        host = urlparse(url).netloc
+        last_error: Exception | None = None
+        for attempt in range(1, self.max_retries + 1):
+            wait = self.min_interval - (time.monotonic() - self._last_request.get(host, 0.0))
+            if wait > 0:
+                time.sleep(wait)
+            self._last_request[host] = time.monotonic()
+            try:
+                resp = self.session.get(url, timeout=self.timeout)
+            except requests.RequestException as exc:
+                last_error = exc
+            else:
+                if resp.status_code == 200:
+                    return resp.text
+                if resp.status_code == 404:
+                    raise FetchError(f"404 em {url}")
+                last_error = FetchError(f"HTTP {resp.status_code} em {url}")
+            log.info("Tentativa %d/%d falhou para %s: %s", attempt, self.max_retries, url, last_error)
+            time.sleep(self.min_interval * 2**attempt)
+        raise FetchError(str(last_error))
+
+
+def _expired(path: Path, max_age_hours: float | None) -> bool:
+    if max_age_hours is None:
+        return False
+    return (time.time() - path.stat().st_mtime) > max_age_hours * 3600
+
+
+def _mtime(path: Path) -> str:
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(path.stat().st_mtime))

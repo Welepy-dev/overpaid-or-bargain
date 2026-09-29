@@ -1,0 +1,4 @@
+{"transfers":[
+ {"url":"/x","from":{"href":"/sl-benfica/startseite/verein/294","clubName":"Benfica"},"to":{"href":"/fc-arsenal/startseite/verein/11","clubName":"Arsenal"},"date":"Jul 10, 2026","dateUnformatted":"2026-07-10","season":"26/27","marketValue":"€60.00m","fee":"€70.00m","upcoming":false},
+ {"url":"/y","from":{"href":"/sl-benfica-b/startseite/verein/2999","clubName":"Benfica B"},"to":{"href":"/sl-benfica/startseite/verein/294","clubName":"Benfica"},"date":"Jul 1, 2023","dateUnformatted":"2023-07-01","season":"23/24","marketValue":"€1.00m","fee":"-","upcoming":false}
+]}

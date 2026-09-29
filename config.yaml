@@ -1,0 +1,48 @@
+# Configuração central do pipeline. Alterar aqui, não no código.
+
+# Época em análise (ano de início: 2026 = 2026/27).
+season: 2026
+# Épocas de verões anteriores para o histórico do modelo (Fase 4).
+history_seasons: [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+
+# As 5 grandes ligas: código e slug do Transfermarkt, nome no soccerdata.
+leagues:
+  ENG:
+    tm_code: GB1
+    tm_slug: premier-league
+    soccerdata: ENG-Premier League
+  ESP:
+    tm_code: ES1
+    tm_slug: laliga
+    soccerdata: ESP-La Liga
+  ITA:
+    tm_code: IT1
+    tm_slug: serie-a
+    soccerdata: ITA-Serie A
+  GER:
+    tm_code: L1
+    tm_slug: bundesliga
+    soccerdata: GER-Bundesliga
+  FRA:
+    tm_code: FR1
+    tm_slug: ligue-1
+    soccerdata: FRA-Ligue 1
+
+# Regras de elegibilidade (decisões de 29/09/2026).
+eligibility:
+  exclude_goalkeepers: true
+  exclude_loans: true          # inclui empréstimos com obrigação de compra
+  exclude_free_transfers: true # jogador livre não foi "comprado"
+  exclude_returns: true        # regresso de empréstimo
+
+# Data de referência da força dos clubes (ClubElo), por verão: 1 de julho.
+clubelo_reference_month_day: "07-01"
+
+http:
+  cache_dir: data/raw
+  min_interval_seconds: 3.0    # intervalo mínimo entre pedidos ao mesmo domínio
+  timeout_seconds: 30
+  max_retries: 3
+  # Páginas que mudam (transferências da época corrente, estatísticas em curso)
+  # expiram ao fim de N horas; o resto fica em cache para sempre.
+  live_max_age_hours: 24
