@@ -1,13 +1,16 @@
-"""Sofascore: estatísticas por época dos jogadores que chegam de fora das 5 ligas.
+"""Sofascore: estatísticas por época, por liga inteira (5 ligas) e por jogador (resto).
 
-Recolhem-se só as páginas desses jogadores (não as ligas inteiras):
+5 grandes ligas (substitui o FBref, que perdeu os dados Opta em jan/2026):
+``/unique-tournament/{liga}/season/{época}/statistics`` devolve todos os
+jogadores de campo da liga, 100 por pedido, com as métricas de ``LEAGUE_FIELDS``
+(desarmes, interceções, duelos, passes no último terço, dribles...). Cerca de
+6 pedidos por liga e época.
+
+Jogadores que chegam de fora das 5 ligas (só esses, não as ligas inteiras):
 
 1. pesquisa pelo nome e confirmação pela data de nascimento (do Transfermarkt);
 2. lista de competições/épocas do jogador;
 3. estatísticas agregadas de cada competição nas épocas relevantes para o verão.
-
-Também serve de fonte de reserva para métricas de progressão e defesa que o
-FBref deixou de publicar.
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ import pandas as pd
 from ..config import Config
 from ..http import BlockedError, BrowserFetcher, CachedFetcher, FetchError
 from ..progress import progress
+from ._seasons import short_season_label
 
 log = logging.getLogger(__name__)
 
@@ -182,3 +186,123 @@ def _fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher) -> tupl
         finally:
             matches.append(rec)
     return pd.DataFrame(matches), pd.DataFrame(stats)
+
+
+# --------------------------------------------------------------------------- #
+# Ligas inteiras (5 grandes ligas)
+# --------------------------------------------------------------------------- #
+
+# Métricas pedidas por jogador; os nomes são os da API (lista do ScraperFC).
+LEAGUE_FIELDS = (
+    "appearances", "matchesStarted", "minutesPlayed", "rating",
+    "goals", "assists", "expectedGoals", "expectedAssists", "totalShots", "shotsOnTarget",
+    "bigChancesCreated", "keyPasses", "totalAttemptAssist",
+    "accuratePasses", "totalPasses", "accurateFinalThirdPasses", "accurateOppositionHalfPasses",
+    "accurateLongBalls", "totalLongBalls", "accurateCrosses", "totalCross",
+    "successfulDribbles", "totalContest", "touches", "possessionLost", "dispossessed",
+    "tackles", "tacklesWon", "interceptions", "clearances", "outfielderBlocks", "blockedShots",
+    "ballRecovery", "possessionWonAttThird", "dribbledPast",
+    "totalDuelsWon", "groundDuelsWon", "aerialDuelsWon", "aerialLost", "duelLost",
+    "errorLeadToShot", "errorLeadToGoal", "fouls", "wasFouled", "yellowCards", "redCards",
+)
+# Defesas, médios e avançados (sem guarda-redes, fora do âmbito).
+OUTFIELD_FILTER = "position.in.D~M~F"
+
+
+def parse_tournament_seasons(data: dict) -> dict[str, int]:
+    """``/unique-tournament/{id}/seasons`` -> {'25/26': id da época}."""
+    return {s["year"]: s["id"] for s in data.get("seasons", []) or [] if s.get("year") and s.get("id")}
+
+
+def league_stats_url(tournament_id: int, season_id: int, offset: int) -> str:
+    return (
+        f"{API}/unique-tournament/{tournament_id}/season/{season_id}/statistics"
+        f"?limit=100&offset={offset}&accumulation=total&fields={'%2C'.join(LEAGUE_FIELDS)}&filters={OUTFIELD_FILTER}"
+    )
+
+
+def parse_league_stats(data: dict) -> list[dict]:
+    rows = []
+    for r in data.get("results", []) or []:
+        player, team = r.get("player") or {}, r.get("team") or {}
+        stats = {k: v for k, v in r.items() if k not in ("player", "team") and not isinstance(v, (dict, list))}
+        rows.append(
+            {"sofascore_id": player.get("id"), "sofascore_name": player.get("name"),
+             "team_id": team.get("id"), "team_name": team.get("name"), **stats}
+        )
+    return rows
+
+
+def fetch_league_seasons(cfg: Config, seasons: list[int], f: CachedFetcher | None = None) -> pd.DataFrame:
+    """Uma linha por jogador de campo, liga e época (``season`` = ano de início)."""
+    own = f is None
+    f = f or fetcher(cfg)
+    rows = []
+    try:
+        leagues = [lg for lg in cfg.leagues if lg.sofascore]
+        for lg in progress(leagues, "Sofascore ligas"):
+            try:
+                ids = parse_tournament_seasons(f.get_json(f"{API}/unique-tournament/{lg.sofascore}/seasons", max_age_hours=cfg.http["live_max_age_hours"]))
+            except BlockedError:
+                raise
+            except FetchError as exc:
+                log.warning("Sofascore sem épocas de %s: %s", lg.key, exc)
+                continue
+            for season in seasons:
+                season_id = ids.get(short_season_label(season))
+                if season_id is None:
+                    log.warning("Sofascore sem a época %s de %s", short_season_label(season), lg.key)
+                    continue
+                live = cfg.http["live_max_age_hours"] if season >= cfg.season else None
+                offset = 0
+                while True:
+                    body = f.get_json(league_stats_url(lg.sofascore, season_id, offset), max_age_hours=live)
+                    for r in parse_league_stats(body):
+                        rows.append({"league": lg.key, "season": season, "sofascore_season_id": season_id, **r})
+                    if body.get("page", 1) >= body.get("pages", 0):
+                        break
+                    offset += 100
+    finally:
+        if own:
+            f.close()
+    return pd.DataFrame(rows)
+
+
+def match_league_players(players: pd.DataFrame, league_stats: pd.DataFrame) -> pd.DataFrame:
+    """Liga cada compra vinda das 5 ligas ao jogador do Sofascore na época anterior.
+
+    ``players`` precisa de: player_id, player_name, season (verão), origin_league_top5,
+    other_club_name. Por ordem: mesmo nome no clube de origem; mesmo nome, único na
+    liga (jogadores que mudaram de clube em janeiro); último nome igual e único no
+    clube de origem. O resto fica ``not_found``/``ambiguous`` para revisão na Fase 2.
+    """
+    pools = {key: g for key, g in league_stats.groupby(["league", "season"])} if not league_stats.empty else {}
+    out = []
+    for p in players.itertuples(index=False):
+        rec = {"player_id": p.player_id, "summer": p.season, "player_name": p.player_name, "sofascore_id": None, "match_status": "not_found"}
+        pool = pools.get((p.origin_league_top5, p.season - 1))
+        if pool is not None:
+            names = pool["sofascore_name"].fillna("").map(normalize_name)
+            club = normalize_name(p.other_club_name or "")
+            in_club = pool["team_name"].fillna("").map(lambda t: _same_club(club, normalize_name(t)))
+            name = normalize_name(p.player_name)
+            last = name.split()[-1] if name else None
+            for cand in (pool[in_club & (names == name)], pool[names == name], pool[in_club & (names.str.split().str[-1] == last)]):
+                ids = cand["sofascore_id"].unique()
+                if len(ids) == 1:
+                    rec.update(sofascore_id=int(ids[0]), sofascore_name=cand["sofascore_name"].iloc[0], match_status="matched")
+                    break
+                if len(ids) > 1:
+                    rec["match_status"] = "ambiguous"
+                    break
+        out.append(rec)
+    return pd.DataFrame(out)
+
+
+_CLUB_NOISE = {"fc", "cf", "ac", "as", "ssc", "afc", "sc", "sv", "vfb", "vfl", "tsg", "rc", "ogc", "de", "club", "calcio", "1", "04", "05", "1899", "1846", "1907", "1909"}
+
+
+def _same_club(a: str, b: str) -> bool:
+    """Nomes de clube do Transfermarkt e do Sofascore ('Chelsea FC' / 'Chelsea')."""
+    wa, wb = set(a.split()) - _CLUB_NOISE, set(b.split()) - _CLUB_NOISE
+    return bool(wa and wb and (wa <= wb or wb <= wa or len(wa & wb) >= 2))

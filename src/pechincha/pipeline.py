@@ -4,12 +4,17 @@ Passos (cada um grava em ``data/interim/`` e pode correr sozinho):
 
 - ``transfers``   Transfermarkt: movimentos das 5 ligas, clubes de cada época,
                   transferências elegíveis (compras, sem empréstimos nem GR).
-- ``tm_details``  Transfermarkt: histórico, valor de mercado antes da
-                  transferência e perfil dos jogadores elegíveis.
+- ``tm_details``  Histórico, valor de mercado antes da transferência e perfil dos
+                  jogadores elegíveis: dataset público nos verões até
+                  ``tm_dump.last_summer``, Transfermarkt para o resto.
 - ``understat``   Estatísticas por época (verões anteriores) e jogo a jogo (época corrente).
-- ``fbref``       Estatísticas por época das 5 ligas (standard, shooting, playing_time, misc).
-- ``clubelo``     Força dos clubes a 1 de julho de cada verão.
+- ``sofascore_leagues``  Sofascore: métricas defensivas e de posse de todos os
+                  jogadores de campo das 5 ligas, por época (substitui o FBref).
+- ``uefa``        Coeficientes UEFA por país (força das ligas de origem).
 - ``sofascore``   Jogadores que chegam de fora das 5 ligas.
+
+Opcional (fora da execução por omissão): ``clubelo``, força dos clubes a 1 de
+julho; a API do ClubElo passou a exigir registo em setembro de 2026.
 
 ``current_only=True`` limita tudo à época corrente: é a execução semanal.
 """
@@ -22,12 +27,14 @@ from pathlib import Path
 import pandas as pd
 
 from .config import Config
-from .ingest import clubelo, fbref, sofascore, transfermarkt, understat
+from .http import FetchError
+from .ingest import clubelo, sofascore, tm_dump, transfermarkt, uefa, understat
 from .progress import progress
 
 log = logging.getLogger(__name__)
 
-STEPS = ["transfers", "tm_details", "understat", "fbref", "clubelo", "sofascore"]
+STEPS = ["transfers", "tm_details", "understat", "sofascore_leagues", "uefa", "sofascore"]
+OPTIONAL_STEPS = ["clubelo"]
 
 GOALKEEPER = {"goalkeeper", "gk", "guarda-redes"}
 
@@ -90,6 +97,13 @@ def enrich_with_details(eligible: pd.DataFrame, history: pd.DataFrame, values: p
             mv_date.append(d)
         df["market_value_before"] = mv_before
         df["market_value_before_date"] = mv_date
+    if "market_value_at_transfer" in df:
+        # Sem histórico de valores (jogadores antigos pedidos só com o histórico de
+        # transferências): usa-se o valor que o Transfermarkt mostra na transferência.
+        if "market_value_before" not in df:
+            df["market_value_before"] = None
+            df["market_value_before_date"] = None
+        df["market_value_before"] = pd.to_numeric(df["market_value_before"], errors="coerce").fillna(df["market_value_at_transfer"])
     if not profiles.empty:
         cols = [c for c in ["player_id", "date_of_birth", "height_cm", "foot", "position_detail", "citizenship", "contract_expires"] if c in profiles]
         df = df.merge(profiles[cols].drop_duplicates("player_id"), on="player_id", how="left")
@@ -147,13 +161,51 @@ def _step_transfers(cfg: Config, years: list[int]) -> None:
 def _step_tm_details(cfg: Config, years: list[int]) -> None:
     out = cfg.interim_dir
     eligible = load(out / "transfers_eligible.parquet")
-    eligible = eligible[eligible["season"].isin(years)]
-    history, values, profiles = transfermarkt.fetch_player_details(cfg, eligible["player_id"].tolist())
+    eligible = eligible[eligible["season"].isin(years)].reset_index(drop=True)
+    parts = []  # (histórico, valores, perfis, origem)
+
+    # Verões cobertos pelo dataset público: só os jogadores em falta vão ao Transfermarkt.
+    last_dump = cfg.tm_dump.get("last_summer")
+    in_dump_years = eligible["season"] <= last_dump if last_dump else pd.Series(False, index=eligible.index)
+    from_dump = pd.Series(False, index=eligible.index)
+    if in_dump_years.any():
+        try:
+            mask, h, v, p = tm_dump.details_for(cfg, eligible[in_dump_years])
+            from_dump.loc[mask[mask].index] = True
+            parts.append((h, v, p, "tm_dump"))
+        except (FetchError, OSError, KeyError, ValueError) as exc:
+            # Sem o dataset (download falhou, colunas mudaram), tudo vai ao Transfermarkt.
+            log.warning("Dataset público indisponível (%s); a usar só o Transfermarkt", exc)
+
+    f = transfermarkt.fetcher(cfg)
+    try:
+        gaps = eligible[in_dump_years & ~from_dump]
+        if not gaps.empty:
+            # Verões antigos: o histórico já traz o valor na data da transferência.
+            h, v, p = transfermarkt.fetch_player_details(cfg, gaps["player_id"].tolist(), f, closed=True, with_values=False)
+            parts.append((h, v, p, "transfermarkt"))
+        recent = eligible[~in_dump_years]
+        if not recent.empty:
+            closed = all(cfg.summer_closed(s) for s in recent["season"].unique())
+            h, v, p = transfermarkt.fetch_player_details(cfg, recent["player_id"].tolist(), f, closed=closed)
+            parts.append((h, v, p, "transfermarkt"))
+    finally:
+        f.close()
+
+    history = _concat([h.assign(details_source=src) for h, _, _, src in parts])
+    values = _concat([v for _, v, _, _ in parts])
+    profiles = _concat([p.assign(details_source=src) if not p.empty else p for _, _, p, src in parts])
     _merge_save(history, out / "tm_transfer_history.parquet", "player_id", None)
     _merge_save(values, out / "tm_market_values.parquet", "player_id", None)
     _merge_save(profiles, out / "tm_profiles.parquet", "player_id", None)
     enriched = enrich_with_details(eligible, history, values, profiles)
+    enriched["details_source"] = from_dump.map({True: "tm_dump", False: "transfermarkt"})
     _merge_save(enriched, out / "transfers_enriched.parquet", "season", years)
+
+
+def _concat(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    frames = [x for x in frames if not x.empty]
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
 def _stat_seasons(cfg: Config, years: list[int]) -> list[int]:
@@ -168,9 +220,24 @@ def _step_understat(cfg: Config, years: list[int]) -> None:
         save(df, out / f"understat_{cfg.season}_{name}.parquet")
 
 
-def _step_fbref(cfg: Config, years: list[int]) -> None:
-    for stat, df in fbref.fetch_player_seasons(cfg, _stat_seasons(cfg, years)).items():
-        _merge_save(df, cfg.interim_dir / f"fbref_player_seasons_{stat}.parquet", "season", None)
+def _step_sofascore_leagues(cfg: Config, years: list[int]) -> None:
+    out = cfg.interim_dir
+    stats = sofascore.fetch_league_seasons(cfg, _stat_seasons(cfg, years))
+    _merge_save(stats, out / "sofascore_league_player_seasons.parquet", "season", _stat_seasons(cfg, years))
+    base = load(out / "transfers_eligible.parquet")
+    todo = base[base["origin_top5"].astype(bool) & base["season"].isin(years)]
+    cols = ["player_id", "player_name", "season", "origin_league_top5", "other_club_name"]
+    matches = sofascore.match_league_players(todo[cols].drop_duplicates(), stats)
+    if not matches.empty:
+        log.info("Sofascore (ligas): %d de %d compras ligadas", int((matches["match_status"] == "matched").sum()), len(matches))
+    _merge_save(matches.assign(source="league"), out / "sofascore_league_matches.parquet", "summer", years)
+
+
+def _step_uefa(cfg: Config, years: list[int]) -> None:
+    out = cfg.interim_dir
+    coefs = uefa.fetch_coefficients(cfg, years)
+    _merge_save(coefs, out / "uefa_country_coefficients.parquet", "season_label", None)
+    _merge_save(uefa.five_year_ranking(coefs, years), out / "uefa_country_ranking.parquet", "summer", years)
 
 
 def _step_clubelo(cfg: Config, years: list[int]) -> None:
@@ -195,7 +262,8 @@ _STEP_FUNCS = {
     "transfers": _step_transfers,
     "tm_details": _step_tm_details,
     "understat": _step_understat,
-    "fbref": _step_fbref,
+    "sofascore_leagues": _step_sofascore_leagues,
+    "uefa": _step_uefa,
     "clubelo": _step_clubelo,
     "sofascore": _step_sofascore,
 }

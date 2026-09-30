@@ -1,0 +1,8 @@
+{"results": [
+  {"player": {"name": "R. Mid", "slug": "r-mid", "id": 501}, "team": {"name": "Chelsea", "slug": "chelsea", "id": 38},
+   "minutesPlayed": 2510, "tackles": 61, "interceptions": 33, "accurateFinalThirdPasses": 210, "expectedGoals": 2.4},
+  {"player": {"name": "Joao Silva", "slug": "joao-silva", "id": 777}, "team": {"name": "Wolverhampton", "slug": "wolves", "id": 3},
+   "minutesPlayed": 900, "tackles": 12, "interceptions": 4, "accurateFinalThirdPasses": 20, "expectedGoals": 0.3},
+  {"player": {"name": "Cole Palmer", "slug": "cole-palmer", "id": 502}, "team": {"name": "Chelsea", "slug": "chelsea", "id": 38},
+   "minutesPlayed": 2800, "tackles": 20, "interceptions": 5, "accurateFinalThirdPasses": 400, "expectedGoals": 14.1}
+], "page": 1, "pages": 1}
