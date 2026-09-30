@@ -341,7 +341,7 @@ def fetch_league_transfers(cfg: Config, seasons: list[int], f: CachedFetcher | N
 def fetch_player_details(cfg: Config, player_ids: list[int], f: CachedFetcher | None = None):
     """Histórico de transferências, valores de mercado e perfil de cada jogador."""
     f = f or fetcher(cfg)
-    live = cfg.http["live_max_age_hours"]
+    live = cfg.http.get("player_details_max_age_hours", cfg.http["live_max_age_hours"])
     hist, values, profiles = [], [], []
     ids = sorted(set(int(p) for p in player_ids))
     for pid in progress(ids, "Transfermarkt jogadores"):

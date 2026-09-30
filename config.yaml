@@ -44,9 +44,12 @@ http:
   min_interval_by_source:
     # O Transfermarkt bloqueou o IP (AWS WAF, "Human Verification") ao fim de
     # ~450 pedidos a 3 s; mais devagar para o histórico completo.
-    transfermarkt: 6.0
+    transfermarkt: 10.0
   timeout_seconds: 30
   max_retries: 3
   # Páginas que mudam (transferências da época corrente, estatísticas em curso)
   # expiram ao fim de N horas; o resto fica em cache para sempre.
   live_max_age_hours: 24
+  # Histórico, valores de mercado e perfil dos jogadores: mudam pouco e são
+  # milhares de pedidos, por isso duram mais (retomar não volta a pedi-los).
+  player_details_max_age_hours: 168
