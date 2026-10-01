@@ -19,10 +19,12 @@ A data analytics project that evaluates the players of the 2026 summer transfer 
 | Source        | Data                                             |
 |--------------|---------------------------------------------------|
 | Transfermarkt| Transfer fee, age, contract, market value before the transfer, position, origin club |
+| [transfermarkt-datasets](https://github.com/dcaribou/transfermarkt-datasets) | Public Transfermarkt dump (CC0, frozen July 2026): player details for summers up to 2025 |
 | Understat    | xG, xA, xGChain, xGBuildup, shots, key passes (top-5 leagues) |
-| FBref        | Defensive metrics still published (interceptions, tackles won, aerials, recoveries) |
-| Sofascore    | Season stats for players arriving from outside the top-5 leagues |
-| ClubElo      | Club strength on July 1st of each summer (league-strength adjustment) |
+| Sofascore    | Defensive and possession metrics for every outfield player in the top-5 leagues; season stats for players arriving from other leagues |
+| UEFA ranking | Country coefficients from kassiesa.net (league-strength adjustment) |
+
+FBref lost its Opta data in January 2026 and ClubElo's API requires registration since September 2026, so neither is used by default.
 
 ## Methodology (planned)
 
@@ -60,10 +62,11 @@ uv run main.py collect --steps transfers tm_details   # selected steps
 uv run pytest                             # parser and pipeline tests (offline)
 ```
 
-Steps: `transfers`, `tm_details`, `understat`, `fbref`, `clubelo`, `sofascore`.
+Steps: `transfers`, `tm_details`, `understat`, `sofascore_leagues`, `uefa`, `sofascore` (and the optional `clubelo`).
 Settings (leagues, seasons, eligibility rules, request interval) live in `config.yaml`.
 Every downloaded page is cached in `data/raw/`; tables are written to `data/interim/` as parquet.
-A failing step is logged and the next steps still run. FBref needs Chromium (set `PECHINCHA_BROWSER` if it is not found).
+A failing step is logged and the next steps still run. Sofascore needs Chromium (set `PECHINCHA_BROWSER` if it is not found).
+Player details for summers up to 2025 come from the public dump; only players missing from it are requested from Transfermarkt. Once a summer window has closed, its player pages are cached for good, so the weekly refresh only fetches new players.
 
 ## Repository structure
 
@@ -73,7 +76,7 @@ A failing step is logged and the next steps still run. FBref needs Chromium (set
 ├── main.py
 ├── src/pechincha/
 │   ├── config.py, http.py, pipeline.py, cli.py
-│   └── ingest/          # transfermarkt, understat, fbref, clubelo, sofascore
+│   └── ingest/          # transfermarkt, tm_dump, understat, sofascore, uefa, clubelo
 ├── tests/               # offline tests with fixtures
 ├── data/                # raw/ cache and interim/ tables (not in git)
 ├── notes.txt

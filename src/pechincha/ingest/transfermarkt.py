@@ -338,16 +338,28 @@ def fetch_league_transfers(cfg: Config, seasons: list[int], f: CachedFetcher | N
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=LEAGUE_TRANSFER_COLUMNS)
 
 
-def fetch_player_details(cfg: Config, player_ids: list[int], f: CachedFetcher | None = None):
-    """Histórico de transferências, valores de mercado e perfil de cada jogador."""
+def fetch_player_details(
+    cfg: Config,
+    player_ids: list[int],
+    f: CachedFetcher | None = None,
+    closed: bool = False,
+    with_values: bool = True,
+):
+    """Histórico de transferências, valores de mercado e perfil de cada jogador.
+
+    ``closed``: os verões destes jogadores já fecharam, a cache não expira.
+    ``with_values=False`` poupa um pedido por jogador: o histórico já traz o
+    valor de mercado na data da transferência.
+    """
     f = f or fetcher(cfg)
-    live = cfg.http.get("player_details_max_age_hours", cfg.http["live_max_age_hours"])
+    live = None if closed else cfg.http.get("player_details_max_age_hours", cfg.http["live_max_age_hours"])
     hist, values, profiles = [], [], []
     ids = sorted(set(int(p) for p in player_ids))
     for pid in progress(ids, "Transfermarkt jogadores"):
         try:
             hist.append(parse_transfer_history(f.get_json(transfer_history_url(pid), max_age_hours=live), pid))
-            values.append(parse_market_values(f.get_json(market_value_url(pid), max_age_hours=live), pid))
+            if with_values:
+                values.append(parse_market_values(f.get_json(market_value_url(pid), max_age_hours=live), pid))
             profiles.append(parse_profile(f.get_text(profile_url(pid), max_age_hours=live), pid))
         except BlockedError:
             # O que já foi descarregado fica em cache: voltar a correr retoma daqui.

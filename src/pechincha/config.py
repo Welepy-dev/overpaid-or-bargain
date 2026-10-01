@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -16,6 +17,7 @@ class League:
     tm_code: str
     tm_slug: str
     soccerdata: str
+    sofascore: int | None = None
 
 
 @dataclass(frozen=True)
@@ -26,6 +28,9 @@ class Config:
     eligibility: dict
     clubelo_reference_month_day: str
     http: dict
+    summer_window_close_month_day: str = "09-01"
+    tm_dump: dict = field(default_factory=dict)
+    uefa: dict = field(default_factory=dict)
     root: Path = ROOT
 
     @property
@@ -44,6 +49,11 @@ class Config:
     def all_seasons(self) -> list[int]:
         return sorted(set(self.history_seasons) | {self.season})
 
+    def summer_closed(self, summer: int, today: date | None = None) -> bool:
+        """A janela de verão ``summer`` já fechou (os dados dessas transferências não mudam)."""
+        month, day = (int(x) for x in self.summer_window_close_month_day.split("-"))
+        return (today or date.today()) > date(summer, month, day)
+
 
 def load_config(path: Path | None = None) -> Config:
     path = path or ROOT / "config.yaml"
@@ -56,5 +66,8 @@ def load_config(path: Path | None = None) -> Config:
         eligibility=raw["eligibility"],
         clubelo_reference_month_day=raw["clubelo_reference_month_day"],
         http=raw["http"],
+        summer_window_close_month_day=raw.get("summer_window_close_month_day", "09-01"),
+        tm_dump=raw.get("tm_dump", {}),
+        uefa=raw.get("uefa", {}),
         root=path.parent,
     )
