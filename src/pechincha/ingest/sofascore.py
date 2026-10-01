@@ -25,16 +25,19 @@ from ..progress import progress
 
 log = logging.getLogger(__name__)
 
-API = "https://api.sofascore.com/api/v1"
+# api.sofascore.com passou a dar 403 mesmo dentro do browser; a mesma API servida
+# pelo www (mesma origem da página aberta) responde.
+API = "https://www.sofascore.com/api/v1"
 # Candidatos da pesquisa cujo perfil se abre para comparar a data de nascimento.
 MAX_CANDIDATES = 3
 
 
 def fetcher(cfg: Config) -> BrowserFetcher:
     # A API devolve 403 a clientes que não são browsers; os pedidos vão por um Chromium.
+    # Abre-se o robots.txt (leve) só para ficar na origem www; a página inicial pode não acabar de carregar.
     h = cfg.http
     return BrowserFetcher(
-        cfg.cache_dir, "sofascore", home="https://www.sofascore.com/",
+        cfg.cache_dir, "sofascore", home="https://www.sofascore.com/robots.txt",
         min_interval=cfg.min_interval("sofascore"), timeout=h["timeout_seconds"], max_retries=h["max_retries"],
     )
 
