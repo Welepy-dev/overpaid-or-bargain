@@ -33,3 +33,13 @@ def test_other_errors_are_retried(tmp_path, monkeypatch):
     with pytest.raises(http.FetchError) as exc:
         f.get_text("https://www.transfermarkt.com/x")
     assert not isinstance(exc.value, http.BlockedError) and session.calls == 3
+
+
+def test_page_without_charset_is_read_as_utf8(tmp_path):
+    import requests
+
+    resp = requests.Response()
+    resp.status_code, resp._content = 200, "Türkiye".encode("utf-8")
+    resp.headers["Content-Type"] = "text/html"
+    f = http.CachedFetcher(tmp_path, "uefa", min_interval=0, session=FakeSession(resp))
+    assert f.get_text("https://kassiesa.net/x") == "Türkiye"

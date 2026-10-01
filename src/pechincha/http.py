@@ -106,6 +106,9 @@ class CachedFetcher:
                 last_error = exc
             else:
                 if resp.status_code == 200:
+                    if "charset" not in resp.headers.get("content-type", "").lower():
+                        # Sem charset no cabeçalho o requests assume latin-1 (kassiesa: "TÃ¼rkiye").
+                        resp.encoding = "utf-8"
                     return resp.text
                 if resp.status_code == 404:
                     raise FetchError(f"404 em {url}")
