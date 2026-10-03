@@ -1,9 +1,10 @@
-"""Linha de comandos: ``uv run main.py collect [--steps ...] [--current-only]``."""
+"""Linha de comandos: ``uv run main.py collect [--steps ...] [--current-only] [--no-refresh]``."""
 
 from __future__ import annotations
 
 import argparse
 import logging
+from dataclasses import replace
 
 from .config import load_config
 from .pipeline import OPTIONAL_STEPS, STEPS, run
@@ -15,11 +16,14 @@ def main(argv: list[str] | None = None) -> None:
     collect = sub.add_parser("collect", help="Fase 1: recolha de dados")
     collect.add_argument("--steps", nargs="+", choices=STEPS + OPTIONAL_STEPS, default=STEPS, help="passos a correr (por omissão, todos menos clubelo)")
     collect.add_argument("--current-only", action="store_true", help="só a época corrente (execução semanal)")
+    collect.add_argument("--no-refresh", action="store_true", help="não renovar a cache da época corrente: o que já está em cache lê-se de lá")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg = load_config()
+    if getattr(args, "no_refresh", False):
+        cfg = replace(cfg, http={**cfg.http, "live_max_age_hours": None})
     if args.command == "collect":
         failed = run(cfg, steps=args.steps, current_only=args.current_only)
         if failed:

@@ -157,6 +157,9 @@ def fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher | None = 
 
 def _fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher) -> tuple[pd.DataFrame, pd.DataFrame]:
     matches, stats = [], []
+    # Primeiro os jogadores sem pesquisa em cache: se houver um bloqueio, o que falta avança antes.
+    cached = players["player_name"].map(lambda n: f.cache_path(f"{API}/search/all?q={quote(n)}&page=0", ".json").exists())
+    players = players.iloc[cached.argsort(kind="stable")]
     for p in progress(players.itertuples(index=False), "Sofascore jogadores", total=len(players)):
         dob = p.date_of_birth if isinstance(p.date_of_birth, date) else None
         live = cfg.http["live_max_age_hours"] if p.season >= cfg.season else None
