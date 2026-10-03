@@ -1,0 +1,22 @@
+{
+ "statistics": {
+  "minutesPlayed": 873,
+  "appearances": 20,
+  "goals": 2,
+  "expectedGoals": 1.6623,
+  "expectedAssists": 2.48799781,
+  "tackles": 15,
+  "interceptions": 6,
+  "id": 2110676,
+  "type": "overall",
+  "statisticsType": {
+   "sportSlug": "football",
+   "statisticsType": "player"
+  }
+ },
+ "team": {
+  "id": 3001,
+  "name": "Sporting CP",
+  "national": false
+ }
+}
