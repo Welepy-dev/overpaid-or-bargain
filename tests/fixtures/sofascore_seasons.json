@@ -3,7 +3,10 @@
   {
    "uniqueTournament": {
     "id": 26,
-    "name": "U21 Euro Qualification"
+    "name": "U21 Euro Qualification",
+    "category": {
+     "name": "Europe"
+    }
    },
    "seasons": [
     {
@@ -15,7 +18,11 @@
   {
    "uniqueTournament": {
     "id": 17,
-    "name": "Premier League"
+    "name": "Premier League",
+    "category": {
+     "name": "England",
+     "alpha2": "EN"
+    }
    },
    "seasons": [
     {
@@ -27,7 +34,11 @@
   {
    "uniqueTournament": {
     "id": 238,
-    "name": "Liga Portugal Betclic"
+    "name": "Liga Portugal Betclic",
+    "category": {
+     "name": "Portugal",
+     "alpha2": "PT"
+    }
    },
    "seasons": [
     {
@@ -43,7 +54,10 @@
   {
    "uniqueTournament": {
     "id": 7,
-    "name": "UEFA Champions League"
+    "name": "UEFA Champions League",
+    "category": {
+     "name": "Europe"
+    }
    },
    "seasons": [
     {
@@ -59,7 +73,11 @@
   {
    "uniqueTournament": {
     "id": 345,
-    "name": "Supertaça"
+    "name": "Supertaça",
+    "category": {
+     "name": "Portugal",
+     "alpha2": "PT"
+    }
    },
    "seasons": [
     {
@@ -75,7 +93,10 @@
   {
    "uniqueTournament": {
     "id": 454,
-    "name": "U21 European Championship"
+    "name": "U21 European Championship",
+    "category": {
+     "name": "Europe"
+    }
    },
    "seasons": [
     {
@@ -87,7 +108,10 @@
   {
    "uniqueTournament": {
     "id": 429,
-    "name": "U17 European Championship"
+    "name": "U17 European Championship",
+    "category": {
+     "name": "Europe"
+    }
    },
    "seasons": [
     {

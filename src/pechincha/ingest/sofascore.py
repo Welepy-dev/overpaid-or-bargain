@@ -10,12 +10,17 @@ Jogadores que chegam de fora das 5 ligas (só esses, não as ligas inteiras):
 
 1. pesquisa pelo nome e confirmação pela data de nascimento (do Transfermarkt);
 2. lista de competições/épocas do jogador;
-3. estatísticas agregadas de cada competição nas épocas relevantes para o verão.
+3. estatísticas agregadas do campeonato nacional nas épocas relevantes para o verão
+   (só jogos de liga, como nas 5 ligas: sem taças, provas europeias nem seleções).
+
+Os jogadores que não se ligam vão para ``data/manual/sofascore_links.csv``; o
+``sofascore_id`` preenchido lá à mão é usado nas execuções seguintes.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import unicodedata
 from datetime import date, datetime, timezone
 from urllib.parse import quote
@@ -34,6 +39,14 @@ log = logging.getLogger(__name__)
 API = "https://www.sofascore.com/api/v1"
 # Candidatos da pesquisa cujo perfil se abre para comparar a data de nascimento.
 MAX_CANDIDATES = 3
+# Competições de um país que não são o campeonato: taças, supertaças, formação, estaduais...
+_NOT_LEAGUE = re.compile(
+    r"cup|copa|coupe|coppa|pokal|beker|kup|puchar|ta[cç]a|troph|trofeo|schaal|shield"
+    r"|super ?cup|supercop|superta|superpuchar|s[üu]per kupa|u\d\d\b|primavera|next gen|juvenil|revela"
+    r"|all.?star|play.?off|feminin|women|copinha|premier league 2"
+    r"|paulista|carioca|mineiro|ga[uú]cho|catarinense|baian|pernambucano|paranaense|goiano|cearense",
+    re.IGNORECASE,
+)
 
 
 def fetcher(cfg: Config) -> BrowserFetcher:
@@ -124,15 +137,25 @@ def pick_candidate(candidates: list[dict], name: str, dob: date | None, club: st
     return exact[0] if len(exact) == 1 else None
 
 
+def is_league(tournament_name: str | None, category: dict | None) -> bool:
+    """Campeonato nacional de clubes (de um país, não amador, não taça)."""
+    category = category or {}
+    if not category.get("alpha2") or "amateur" in (category.get("name") or "").lower():
+        return False  # provas internacionais (UEFA, seleções, Libertadores) e amadoras
+    return not _NOT_LEAGUE.search(tournament_name or "")
+
+
 def parse_player_seasons(data: dict) -> list[dict]:
     out = []
     for block in data.get("uniqueTournamentSeasons", []) or []:
         ut = block.get("uniqueTournament") or {}
+        league = is_league(ut.get("name"), ut.get("category"))
         for s in block.get("seasons", []) or []:
             out.append(
                 {
                     "tournament_id": ut.get("id"),
                     "tournament_name": ut.get("name"),
+                    "is_league": league,
                     "season_id": s.get("id"),
                     "season_label": s.get("year"),
                 }
@@ -140,22 +163,25 @@ def parse_player_seasons(data: dict) -> list[dict]:
     return out
 
 
-def fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+def fetch_players(
+    cfg: Config, players: pd.DataFrame, f: CachedFetcher | None = None, manual: dict[tuple[int, int], int] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """``players`` precisa de: player_id (Transfermarkt), player_name, date_of_birth, other_club_name, season.
 
+    ``manual`` são ligações feitas à mão, {(player_id, verão): sofascore_id}.
     Devolve (correspondências, estatísticas). As correspondências registam
-    também os jogadores não encontrados, para revisão manual na Fase 2.
+    também os jogadores não encontrados, com os candidatos, para ligação manual.
     """
     own = f is None
     f = f or fetcher(cfg)
     try:
-        return _fetch_players(cfg, players, f)
+        return _fetch_players(cfg, players, f, manual or {})
     finally:
         if own:
             f.close()
 
 
-def _fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher, manual: dict[tuple[int, int], int]) -> tuple[pd.DataFrame, pd.DataFrame]:
     matches, stats = [], []
     # Primeiro os jogadores sem pesquisa em cache: se houver um bloqueio, o que falta avança antes.
     cached = players["player_name"].map(lambda n: f.cache_path(f"{API}/search/all?q={quote(n)}&page=0", ".json").exists())
@@ -165,25 +191,29 @@ def _fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher) -> tupl
         live = cfg.http["live_max_age_hours"] if p.season >= cfg.season else None
         rec = {"player_id": p.player_id, "summer": p.season, "player_name": p.player_name, "sofascore_id": None, "match_status": "not_found"}
         try:
-            found = parse_search(f.get_json(f"{API}/search/all?q={quote(p.player_name)}&page=0"))
-            if dob is not None:
-                for c in likely_candidates(found, p.player_name):
-                    if c["date_of_birth"] is None:
-                        c["date_of_birth"] = parse_player_birth(f.get_json(f"{API}/player/{c['sofascore_id']}"))
-            cand = pick_candidate(found, p.player_name, dob, p.other_club_name)
-            if cand is None:
-                rec["match_status"] = "ambiguous" if found else "not_found"
-                continue
-            rec.update(sofascore_id=cand["sofascore_id"], sofascore_name=cand["name"], match_status="matched")
+            if (p.player_id, p.season) in manual:
+                rec.update(sofascore_id=manual[(p.player_id, p.season)], match_status="manual")
+            else:
+                found = parse_search(f.get_json(f"{API}/search/all?q={quote(p.player_name)}&page=0"))
+                if dob is not None:
+                    for c in likely_candidates(found, p.player_name):
+                        if c["date_of_birth"] is None:
+                            c["date_of_birth"] = parse_player_birth(f.get_json(f"{API}/player/{c['sofascore_id']}"))
+                cand = pick_candidate(found, p.player_name, dob, p.other_club_name)
+                if cand is None:
+                    rec["match_status"] = "ambiguous" if found else "not_found"
+                    rec["candidates"] = describe_candidates(found)
+                    continue
+                rec.update(sofascore_id=cand["sofascore_id"], sofascore_name=cand["name"], match_status="matched")
             labels = relevant_season_labels(p.season)
-            seasons = parse_player_seasons(f.get_json(f"{API}/player/{cand['sofascore_id']}/statistics/seasons", max_age_hours=live))
-            for s in (s for s in seasons if s["season_label"] in labels):
-                url = f"{API}/player/{cand['sofascore_id']}/unique-tournament/{s['tournament_id']}/season/{s['season_id']}/statistics/overall"
+            seasons = parse_player_seasons(f.get_json(f"{API}/player/{rec['sofascore_id']}/statistics/seasons", max_age_hours=live))
+            for s in (s for s in seasons if s["season_label"] in labels and s["is_league"]):
+                url = f"{API}/player/{rec['sofascore_id']}/unique-tournament/{s['tournament_id']}/season/{s['season_id']}/statistics/overall"
                 try:
                     body = f.get_json(url, max_age_hours=live)
                 except FetchError:
                     continue
-                stats.append({"player_id": p.player_id, "sofascore_id": cand["sofascore_id"], "summer": p.season, **s, **parse_statistics(body)})
+                stats.append({"player_id": p.player_id, "sofascore_id": rec["sofascore_id"], "summer": p.season, **s, **parse_statistics(body)})
         except BlockedError:
             raise
         except FetchError as exc:
@@ -192,6 +222,15 @@ def _fetch_players(cfg: Config, players: pd.DataFrame, f: CachedFetcher) -> tupl
         finally:
             matches.append(rec)
     return pd.DataFrame(matches), pd.DataFrame(stats)
+
+
+def describe_candidates(candidates: list[dict], limit: int = 5) -> str:
+    """Candidatos em texto para quem liga à mão: 'Nome (id, nascimento, equipa) | ...'."""
+    parts = []
+    for c in candidates[:limit]:
+        extra = ", ".join(str(v) for v in (c.get("sofascore_id"), c.get("date_of_birth"), c.get("team")) if v is not None)
+        parts.append(f"{c.get('name')} ({extra})")
+    return " | ".join(parts)
 
 
 # --------------------------------------------------------------------------- #
@@ -274,26 +313,34 @@ def fetch_league_seasons(cfg: Config, seasons: list[int], f: CachedFetcher | Non
     return pd.DataFrame(rows)
 
 
-def match_league_players(players: pd.DataFrame, league_stats: pd.DataFrame) -> pd.DataFrame:
+def match_league_players(players: pd.DataFrame, league_stats: pd.DataFrame, manual: dict[tuple[int, int], int] | None = None) -> pd.DataFrame:
     """Liga cada compra vinda das 5 ligas ao jogador do Sofascore na época anterior.
 
     ``players`` precisa de: player_id, player_name, season (verão), origin_league_top5,
     other_club_name. Por ordem: mesmo nome no clube de origem; mesmo nome, único na
-    liga (jogadores que mudaram de clube em janeiro); último nome igual e único no
-    clube de origem. O resto fica ``not_found``/``ambiguous`` para revisão na Fase 2.
+    liga (jogadores que mudaram de clube em janeiro); mesmo nome, único nas 5 ligas
+    (emprestados a outro clube das 5 ligas); último nome igual e único no clube de origem. O resto fica ``not_found``/``ambiguous``, com os candidatos,
+    para ligação manual; ``manual`` = {(player_id, verão): sofascore_id}.
     """
+    manual = manual or {}
     pools = {key: g for key, g in league_stats.groupby(["league", "season"])} if not league_stats.empty else {}
+    seasons = {key: g for key, g in league_stats.groupby("season")} if not league_stats.empty else {}
     out = []
     for p in players.itertuples(index=False):
         rec = {"player_id": p.player_id, "summer": p.season, "player_name": p.player_name, "sofascore_id": None, "match_status": "not_found"}
         pool = pools.get((p.origin_league_top5, p.season - 1))
-        if pool is not None:
+        if (p.player_id, p.season) in manual:
+            rec.update(sofascore_id=manual[(p.player_id, p.season)], match_status="manual")
+        elif pool is not None:
             names = pool["sofascore_name"].fillna("").map(normalize_name)
             club = normalize_name(p.other_club_name or "")
-            in_club = pool["team_name"].fillna("").map(lambda t: _same_club(club, normalize_name(t)))
+            team = _closest_team(club, pool["team_name"])  # 'Paris FC' não é o 'Paris Saint-Germain'
+            in_club = pool["team_name"] == team
             name = normalize_name(p.player_name)
             last = name.split()[-1] if name else None
-            for cand in (pool[in_club & (names == name)], pool[names == name], pool[in_club & (names.str.split().str[-1] == last)]):
+            everywhere = seasons.get(p.season - 1, pool)
+            elsewhere = everywhere[everywhere["sofascore_name"].fillna("").map(normalize_name) == name]
+            for cand in (pool[in_club & (names == name)], pool[names == name], elsewhere, pool[in_club & (names.str.split().str[-1] == last)]):
                 ids = cand["sofascore_id"].unique()
                 if len(ids) == 1:
                     rec.update(sofascore_id=int(ids[0]), sofascore_name=cand["sofascore_name"].iloc[0], match_status="matched")
@@ -301,6 +348,13 @@ def match_league_players(players: pd.DataFrame, league_stats: pd.DataFrame) -> p
                 if len(ids) > 1:
                     rec["match_status"] = "ambiguous"
                     break
+            if rec["match_status"] != "matched":
+                # Mesmo último nome na liga primeiro, depois o plantel do clube de origem.
+                near = pd.concat([pool[names.str.split().str[-1] == last], pool[in_club]])
+                near = near.drop_duplicates("sofascore_id")
+                rec["candidates"] = describe_candidates(
+                    [{"name": r.sofascore_name, "sofascore_id": r.sofascore_id, "team": r.team_name} for r in near.itertuples()]
+                )
         out.append(rec)
     return pd.DataFrame(out)
 
@@ -308,7 +362,14 @@ def match_league_players(players: pd.DataFrame, league_stats: pd.DataFrame) -> p
 _CLUB_NOISE = {"fc", "cf", "ac", "as", "ssc", "afc", "sc", "sv", "vfb", "vfl", "tsg", "rc", "ogc", "de", "club", "calcio", "1", "04", "05", "1899", "1846", "1907", "1909"}
 
 
-def _same_club(a: str, b: str) -> bool:
-    """Nomes de clube do Transfermarkt e do Sofascore ('Chelsea FC' / 'Chelsea')."""
-    wa, wb = set(a.split()) - _CLUB_NOISE, set(b.split()) - _CLUB_NOISE
-    return bool(wa and wb and (wa <= wb or wb <= wa or len(wa & wb) >= 2))
+def _closest_team(club: str, teams: pd.Series) -> str | None:
+    """Equipa do Sofascore com mais palavras em comum com o nome do Transfermarkt."""
+    wa = set(club.split()) - _CLUB_NOISE
+    best, score = None, 0.0
+    for t in teams.dropna().unique():
+        wb = set(normalize_name(t).split()) - _CLUB_NOISE
+        j = len(wa & wb) / len(wa | wb) if wa | wb else 0.0
+        if j > score:
+            best, score = t, j
+    return best
+

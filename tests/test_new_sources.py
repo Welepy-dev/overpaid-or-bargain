@@ -61,6 +61,12 @@ def test_league_stats_and_matching():
     assert m.loc[1005, "sofascore_id"] == 501            # último nome, no clube de origem
     assert m.loc[1006, "sofascore_id"] == 777            # nome igual, mudou de clube a meio
     assert m.loc[1007, "match_status"] == "not_found"
+    assert "Cole Palmer (502, Chelsea)" in m.loc[1007, "candidates"]          # plantel do clube de origem, para ligar à mão
+    # Emprestado a um clube de outra liga das 5: encontra-se pelo nome nas 5 ligas.
+    loan = pd.DataFrame([{"league": "GER", "season": 2025, "sofascore_id": 888, "sofascore_name": "Nobody", "team_id": 1, "team_name": "Mainz 05"}])
+    assert ss.match_league_players(players, pd.concat([rows, loan])).set_index("player_id").loc[1007, "sofascore_id"] == 888
+    m = ss.match_league_players(players, rows, manual={(1007, 2026): 501}).set_index("player_id")
+    assert m.loc[1007, "sofascore_id"] == 501 and m.loc[1007, "match_status"] == "manual"
 
 
 def test_league_stats_url_excludes_goalkeepers():

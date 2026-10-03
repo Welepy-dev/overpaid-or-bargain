@@ -14,7 +14,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="pechincha", description="Sobrepago ou pechincha? Pipeline de dados.")
     sub = parser.add_subparsers(dest="command", required=True)
     collect = sub.add_parser("collect", help="Fase 1: recolha de dados")
-    collect.add_argument("--steps", nargs="+", choices=STEPS + OPTIONAL_STEPS, default=STEPS, help="passos a correr (por omissão, todos menos clubelo)")
+    collect.add_argument("--steps", nargs="+", choices=STEPS + OPTIONAL_STEPS, default=STEPS, help="passos a correr (por omissão, todos menos sofascore e clubelo)")
     collect.add_argument("--current-only", action="store_true", help="só a época corrente (execução semanal)")
     collect.add_argument("--no-refresh", action="store_true", help="não renovar a cache da época corrente: o que já está em cache lê-se de lá")
     parser.add_argument("-v", "--verbose", action="store_true")

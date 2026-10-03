@@ -39,6 +39,9 @@ eligibility:
   exclude_loans: true          # inclui empréstimos com obrigação de compra
   exclude_free_transfers: true # jogador livre não foi "comprado"
   exclude_returns: true        # regresso de empréstimo
+  # Só jogadores que chegam de clubes das 5 ligas (decisão de 03/10/2026): os
+  # outros não têm estatísticas comparáveis sem milhares de pedidos ao Sofascore.
+  only_top5_origin: true
 
 # Data de referência da força dos clubes (ClubElo), por verão: 1 de julho.
 # A API do ClubElo passou a exigir registo (set/2026); o passo é opcional.
@@ -66,6 +69,9 @@ http:
     # O Transfermarkt bloqueou o IP (AWS WAF, "Human Verification") ao fim de
     # ~450 pedidos a 3 s; mais devagar para o histórico completo.
     transfermarkt: 10.0
+    # Sofascore: só os jogos de liga dos jogadores de fora das 5 ligas, mais rápido
+    # (decisão de 03/10/2026; se bloquear, o passo para e retoma pela cache).
+    sofascore: 1.5
   timeout_seconds: 30
   max_retries: 3
   # Páginas que mudam (transferências da época corrente, estatísticas em curso)

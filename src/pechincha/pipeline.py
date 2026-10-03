@@ -11,10 +11,16 @@ Passos (cada um grava em ``data/interim/`` e pode correr sozinho):
 - ``sofascore_leagues``  Sofascore: métricas defensivas e de posse de todos os
                   jogadores de campo das 5 ligas, por época (substitui o FBref).
 - ``uefa``        Coeficientes UEFA por país (força das ligas de origem).
-- ``sofascore``   Jogadores que chegam de fora das 5 ligas.
+- ``sofascore``   Jogadores que chegam de fora das 5 ligas (só jogos de liga).
 
-Opcional (fora da execução por omissão): ``clubelo``, força dos clubes a 1 de
-julho; a API do ClubElo passou a exigir registo em setembro de 2026.
+Os jogadores que os dois passos do Sofascore não ligam ficam em
+``data/manual/sofascore_links.csv``: preenche-se ``sofascore_id`` à mão e a
+execução seguinte usa essa ligação (``match_status`` = ``manual``).
+
+Opcionais (fora da execução por omissão): ``sofascore``, posto de parte a
+03/10/2026 (cerca de 1340 jogadores, horas de pedidos e risco de bloqueio);
+``clubelo``, força dos clubes a 1 de julho; a API do ClubElo passou a exigir
+registo em setembro de 2026.
 
 ``current_only=True`` limita tudo à época corrente: é a execução semanal.
 """
@@ -33,8 +39,8 @@ from .progress import progress
 
 log = logging.getLogger(__name__)
 
-STEPS = ["transfers", "tm_details", "understat", "sofascore_leagues", "uefa", "sofascore"]
-OPTIONAL_STEPS = ["clubelo"]
+STEPS = ["transfers", "tm_details", "understat", "sofascore_leagues", "uefa"]
+OPTIONAL_STEPS = ["sofascore", "clubelo"]
 
 GOALKEEPER = {"goalkeeper", "gk", "guarda-redes"}
 
@@ -48,7 +54,8 @@ def select_eligible(moves: pd.DataFrame, top5_clubs: pd.DataFrame, cfg: Config) 
 
     Usa só as entradas ("in"), para cada transferência aparecer uma vez mesmo
     quando os dois clubes são das 5 ligas. ``origin_top5`` indica se o clube
-    de origem estava nas 5 ligas na época anterior.
+    de origem estava nas 5 ligas na época anterior; com ``only_top5_origin``
+    ficam só essas.
     """
     rules = cfg.eligibility
     df = moves[(moves["direction"] == "in") & (moves["window"] == "summer")].copy()
@@ -69,6 +76,8 @@ def select_eligible(moves: pd.DataFrame, top5_clubs: pd.DataFrame, cfg: Config) 
     prev = prev.rename(columns={"club_id": "other_club_id", "league": "origin_league_top5"})
     df = df.merge(prev, on=["season", "other_club_id"], how="left")
     df["origin_top5"] = df["origin_league_top5"].notna()
+    if rules.get("only_top5_origin", False):
+        df = df[df["origin_top5"]]
     # Transferências com valor desconhecido ficam, marcadas, para tentar outra fonte na Fase 2.
     df["fee_known"] = df["fee"].notna()
     return df.drop_duplicates(["season", "player_id", "club_id"]).reset_index(drop=True)
@@ -227,10 +236,11 @@ def _step_sofascore_leagues(cfg: Config, years: list[int]) -> None:
     base = load(out / "transfers_eligible.parquet")
     todo = base[base["origin_top5"].astype(bool) & base["season"].isin(years)]
     cols = ["player_id", "player_name", "season", "origin_league_top5", "other_club_name"]
-    matches = sofascore.match_league_players(todo[cols].drop_duplicates(), stats)
+    matches = sofascore.match_league_players(todo[cols].drop_duplicates(), stats, _manual_links(cfg, "league"))
     if not matches.empty:
         log.info("Sofascore (ligas): %d de %d compras ligadas", int((matches["match_status"] == "matched").sum()), len(matches))
     _merge_save(matches.assign(source="league"), out / "sofascore_league_matches.parquet", "summer", years)
+    _update_manual_links(cfg, "league", years, matches, todo.rename(columns={"origin_league_top5": "origin"}))
 
 
 def _step_uefa(cfg: Config, years: list[int]) -> None:
@@ -253,9 +263,55 @@ def _step_sofascore(cfg: Config, years: list[int]) -> None:
         todo["date_of_birth"] = None
     todo["date_of_birth"] = pd.to_datetime(todo["date_of_birth"], errors="coerce").dt.date
     cols = ["player_id", "player_name", "date_of_birth", "other_club_name", "season"]
-    matches, stats = sofascore.fetch_players(cfg, todo[cols].drop_duplicates())
+    matches, stats = sofascore.fetch_players(cfg, todo[cols].drop_duplicates(), manual=_manual_links(cfg, "players"))
     _merge_save(matches, out / "sofascore_matches.parquet", "summer", years)
     _merge_save(stats, out / "sofascore_player_seasons.parquet", "summer", years)
+    _update_manual_links(cfg, "players", years, matches, todo.rename(columns={"other_club_country": "origin"}))
+
+
+MANUAL_LINK_COLUMNS = ["source", "summer", "player_id", "player_name", "other_club_name", "origin", "match_status", "candidates", "sofascore_id"]
+
+
+def _manual_links_path(cfg: Config) -> Path:
+    return cfg.root / "data" / "manual" / "sofascore_links.csv"
+
+
+def _read_manual_links(cfg: Config) -> pd.DataFrame:
+    path = _manual_links_path(cfg)
+    if not path.exists():
+        return pd.DataFrame(columns=MANUAL_LINK_COLUMNS)
+    df = pd.read_csv(path, dtype={"source": str})
+    df["sofascore_id"] = pd.to_numeric(df["sofascore_id"], errors="coerce").astype("Int64")
+    return df
+
+
+def _manual_links(cfg: Config, source: str) -> dict[tuple[int, int], int]:
+    """Ligações preenchidas à mão: {(player_id, verão): sofascore_id}."""
+    df = _read_manual_links(cfg)
+    df = df[(df["source"] == source) & df["sofascore_id"].notna()]
+    return {(int(r.player_id), int(r.summer)): int(r.sofascore_id) for r in df.itertuples()}
+
+
+def _update_manual_links(cfg: Config, source: str, years: list[int], matches: pd.DataFrame, todo: pd.DataFrame) -> None:
+    """Reescreve o CSV de ligação manual com os não ligados desta execução.
+
+    Mantém as linhas já preenchidas à mão e as de outros passos/verões.
+    """
+    old = _read_manual_links(cfg)
+    filled = old[old["sofascore_id"].notna()]
+    keep = old[(old["source"] != source) | ~old["summer"].isin(years)]
+    new = pd.DataFrame(columns=MANUAL_LINK_COLUMNS)
+    if not matches.empty:
+        info = todo.drop_duplicates(["player_id", "season"]).rename(columns={"season": "summer"})
+        info = info[[c for c in ["player_id", "summer", "other_club_name", "origin"] if c in info]]
+        new = matches[~matches["match_status"].isin(["matched", "manual"])].merge(info, on=["player_id", "summer"], how="left")
+        new = new.assign(source=source).reindex(columns=MANUAL_LINK_COLUMNS)
+    links = pd.concat([filled, keep, new], ignore_index=True).drop_duplicates(["source", "player_id", "summer"])
+    links = links.sort_values(["source", "summer", "player_name"])
+    path = _manual_links_path(cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    links.to_csv(path, index=False)
+    log.info("Ligação manual: %d por ligar (%s) em %s", int(links["sofascore_id"].isna().sum()), source, path)
 
 
 _STEP_FUNCS = {

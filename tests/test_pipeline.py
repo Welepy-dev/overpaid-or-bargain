@@ -53,6 +53,7 @@ def offline(monkeypatch):
 
 
 def test_transfers_details_and_sofascore(cfg):
+    cfg.eligibility["only_top5_origin"] = False  # 1001 vem do Benfica
     pipeline.run(cfg, steps=["transfers", "tm_details", "sofascore"], current_only=True)
     out = cfg.interim_dir
 
@@ -72,11 +73,19 @@ def test_transfers_details_and_sofascore(cfg):
     matches = pd.read_parquet(out / "sofascore_matches.parquet")
     assert matches.set_index("player_id").loc[1001, "sofascore_id"] == 900
     stats = pd.read_parquet(out / "sofascore_player_seasons.parquet")
-    assert set(stats["tournament_id"]) == {238, 7, 345, 26, 454}
+    assert set(stats["tournament_id"]) == {238}               # só a liga: sem Champions, Supertaça nem sub-21
     assert stats["expectedGoals"].iloc[0] == 1.6623 and stats["team_name"].iloc[0] == "Sporting CP"
 
 
+def test_only_top5_origin_by_default(cfg):
+    assert cfg.eligibility["only_top5_origin"]
+    pipeline.run(cfg, steps=["transfers"], current_only=True)
+    eligible = pd.read_parquet(cfg.interim_dir / "transfers_eligible.parquet")
+    assert set(eligible["player_id"]) == {1005}   # 1001 vem do Benfica: fica de fora
+
+
 def test_weekly_run_keeps_history(cfg):
+    cfg.eligibility["only_top5_origin"] = False  # 1001 vem do Benfica
     path = cfg.interim_dir / "transfers_eligible.parquet"
     path.parent.mkdir(parents=True)
     old = pd.DataFrame({"season": [2019, 2026], "player_id": [1, 2]})
@@ -89,6 +98,7 @@ def test_weekly_run_keeps_history(cfg):
 
 
 def test_history_uses_public_dataset_and_fetches_only_gaps(cfg):
+    cfg.eligibility["only_top5_origin"] = False  # 1001 vem do Benfica
     pipeline._step_transfers(cfg, [2025])
     pipeline._step_tm_details(cfg, [2025])
     enriched = pd.read_parquet(cfg.interim_dir / "transfers_enriched.parquet").set_index("player_id")
@@ -115,3 +125,24 @@ def test_sofascore_leagues_replaces_fbref(cfg):
     matches = pd.read_parquet(cfg.interim_dir / "sofascore_league_matches.parquet").set_index("player_id")
     assert matches.loc[1005, "sofascore_id"] == 501                  # Chelsea -> Arsenal
     assert "fbref" not in pipeline.STEPS and "clubelo" not in pipeline.STEPS
+
+
+def test_manual_links_survive_reruns(cfg):
+    todo = pd.DataFrame({"player_id": [1, 2], "season": [2026, 2026], "other_club_name": ["Benfica", "Porto"], "origin": ["PT", "PT"]})
+    matches = pd.DataFrame({
+        "player_id": [1, 2], "summer": [2026, 2026], "player_name": ["A", "B"], "sofascore_id": [None, 5],
+        "match_status": ["ambiguous", "matched"], "candidates": ["A1 (10) | A2 (11)", None],
+    })
+    pipeline._update_manual_links(cfg, "players", [2026], matches, todo)
+    path = pipeline._manual_links_path(cfg)
+    links = pd.read_csv(path)
+    assert links["player_id"].tolist() == [1] and links.loc[0, "candidates"] == "A1 (10) | A2 (11)"
+
+    links.loc[0, "sofascore_id"] = 11  # ligado à mão
+    links.to_csv(path, index=False)
+    assert pipeline._manual_links(cfg, "players") == {(1, 2026): 11}
+    assert pipeline._manual_links(cfg, "league") == {}
+
+    # Na execução seguinte o jogador vem como "manual" e a linha preenchida mantém-se.
+    pipeline._update_manual_links(cfg, "players", [2026], matches.assign(match_status=["manual", "matched"]), todo)
+    assert pipeline._manual_links(cfg, "players") == {(1, 2026): 11}

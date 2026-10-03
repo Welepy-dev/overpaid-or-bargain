@@ -21,7 +21,7 @@ A data analytics project that evaluates the players of the 2026 summer transfer 
 | Transfermarkt| Transfer fee, age, contract, market value before the transfer, position, origin club |
 | [transfermarkt-datasets](https://github.com/dcaribou/transfermarkt-datasets) | Public Transfermarkt dump (CC0, frozen July 2026): player details for summers up to 2025 |
 | Understat    | xG, xA, xGChain, xGBuildup, shots, key passes (top-5 leagues) |
-| Sofascore    | Defensive and possession metrics for every outfield player in the top-5 leagues; season stats for players arriving from other leagues |
+| Sofascore    | Defensive and possession metrics for every outfield player in the top-5 leagues (league matches only) |
 | UEFA ranking | Country coefficients from kassiesa.net (league-strength adjustment) |
 
 FBref lost its Opta data in January 2026 and ClubElo's API requires registration since September 2026, so neither is used by default.
@@ -62,7 +62,7 @@ uv run main.py collect --steps transfers tm_details   # selected steps
 uv run pytest                             # parser and pipeline tests (offline)
 ```
 
-Steps: `transfers`, `tm_details`, `understat`, `sofascore_leagues`, `uefa`, `sofascore` (and the optional `clubelo`).
+Steps: `transfers`, `tm_details`, `understat`, `sofascore_leagues`, `uefa` (and the optional `sofascore` and `clubelo`). `sofascore` (season stats for players arriving from outside the top 5) was set aside on 3 Oct 2026: about 1,300 players to look up one by one, hours of requests and a high risk of being blocked.
 Settings (leagues, seasons, eligibility rules, request interval) live in `config.yaml`.
 Every downloaded page is cached in `data/raw/`; tables are written to `data/interim/` as parquet.
 A failing step is logged and the next steps still run. Sofascore needs Chromium (set `PECHINCHA_BROWSER` if it is not found).
