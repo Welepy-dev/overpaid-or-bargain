@@ -59,8 +59,13 @@ def fetcher(cfg: Config) -> BrowserFetcher:
     )
 
 
+# Letras que o NFKD não decompõe e que se perderiam ao passar para ASCII ('Mæhle' -> 'mhle').
+_TRANSLIT = str.maketrans({"æ": "ae", "Æ": "Ae", "ø": "o", "Ø": "O", "ß": "ss", "ł": "l", "Ł": "L", "đ": "d", "Đ": "D",
+                           "ð": "d", "Ð": "D", "þ": "th", "Þ": "Th", "œ": "oe", "Œ": "Oe", "ı": "i"})
+
+
 def normalize_name(name: str) -> str:
-    s = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode()
+    s = unicodedata.normalize("NFKD", (name or "").translate(_TRANSLIT)).encode("ascii", "ignore").decode()
     return " ".join(s.lower().replace("-", " ").replace(".", " ").split())
 
 
@@ -317,10 +322,19 @@ def match_league_players(players: pd.DataFrame, league_stats: pd.DataFrame, manu
     """Liga cada compra vinda das 5 ligas ao jogador do Sofascore na época anterior.
 
     ``players`` precisa de: player_id, player_name, season (verão), origin_league_top5,
-    other_club_name. Por ordem: mesmo nome no clube de origem; mesmo nome, único na
-    liga (jogadores que mudaram de clube em janeiro); mesmo nome, único nas 5 ligas
-    (emprestados a outro clube das 5 ligas); último nome igual e único no clube de origem. O resto fica ``not_found``/``ambiguous``, com os candidatos,
-    para ligação manual; ``manual`` = {(player_id, verão): sofascore_id}.
+    other_club_name. Por ordem, o primeiro critério com um só jogador:
+
+    1. mesmo nome: no clube de origem, na liga (mudou de clube em janeiro), nas 5
+       ligas (emprestado a outro clube das 5 ligas);
+    2. mesmas palavras noutra ordem ('Min-jae Kim' / 'Kim Min-jae'), nos mesmos sítios;
+    3. último nome igual no clube de origem;
+    4. um nome contém todas as palavras do outro ('Abner' / 'Abner Vinícius'), no
+       clube de origem e depois na liga.
+
+    Alcunhas conhecidas (``NAME_ALIASES``) trocam-se antes pelo nome do Sofascore.
+    Um critério com vários jogadores para a procura (``ambiguous``). O resto fica
+    ``not_found``/``ambiguous``, com os candidatos, para ligação manual;
+    ``manual`` = {(player_id, verão): sofascore_id}.
     """
     manual = manual or {}
     pools = {key: g for key, g in league_stats.groupby(["league", "season"])} if not league_stats.empty else {}
@@ -337,10 +351,20 @@ def match_league_players(players: pd.DataFrame, league_stats: pd.DataFrame, manu
             team = _closest_team(club, pool["team_name"])  # 'Paris FC' não é o 'Paris Saint-Germain'
             in_club = pool["team_name"] == team
             name = normalize_name(p.player_name)
+            name = NAME_ALIASES.get(name, name)
             last = name.split()[-1] if name else None
+            words = frozenset(name.split())
             everywhere = seasons.get(p.season - 1, pool)
-            elsewhere = everywhere[everywhere["sofascore_name"].fillna("").map(normalize_name) == name]
-            for cand in (pool[in_club & (names == name)], pool[names == name], elsewhere, pool[in_club & (names.str.split().str[-1] == last)]):
+            all_names = everywhere["sofascore_name"].fillna("").map(normalize_name)
+            same_words, all_same_words = names.map(lambda n: frozenset(n.split()) == words), all_names.map(lambda n: frozenset(n.split()) == words)
+            nested = names.map(lambda n: bool(n) and bool(words) and (words <= set(n.split()) or set(n.split()) <= words))
+            tiers = (
+                pool[in_club & (names == name)], pool[names == name], everywhere[all_names == name],
+                pool[in_club & same_words], pool[same_words], everywhere[all_same_words],
+                pool[in_club & (names.str.split().str[-1] == last)],
+                pool[in_club & nested], pool[nested],
+            )
+            for cand in tiers:
                 ids = cand["sofascore_id"].unique()
                 if len(ids) == 1:
                     rec.update(sofascore_id=int(ids[0]), sofascore_name=cand["sofascore_name"].iloc[0], match_status="matched")
@@ -358,6 +382,11 @@ def match_league_players(players: pd.DataFrame, league_stats: pd.DataFrame, manu
         out.append(rec)
     return pd.DataFrame(out)
 
+
+# Alcunhas do Transfermarkt -> nome no Sofascore (normalizados), quando não há palavras em comum.
+NAME_ALIASES = {
+    "chicharito": "javier hernandez",
+}
 
 _CLUB_NOISE = {"fc", "cf", "ac", "as", "ssc", "afc", "sc", "sv", "vfb", "vfl", "tsg", "rc", "ogc", "de", "club", "calcio", "1", "04", "05", "1899", "1846", "1907", "1909"}
 

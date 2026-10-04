@@ -81,3 +81,35 @@ def test_uefa_ranking():
     r = uefa.five_year_ranking(coefs, [2025]).set_index("country")
     assert round(r.loc["England", "uefa_5y"], 3) == 115.196 and r.loc["England", "uefa_rank"] == 1
     assert r.loc["Portugal", "seasons_found"] == 5
+
+
+def test_league_matching_name_variants():
+    rows = pd.DataFrame([
+        {"league": "ITA", "season": 2022, "sofascore_id": 1, "sofascore_name": "Kim Min-jae", "team_name": "SSC Napoli"},
+        {"league": "ITA", "season": 2022, "sofascore_id": 2, "sofascore_name": "Joakim Mæhle", "team_name": "Atalanta"},
+        {"league": "ENG", "season": 2022, "sofascore_id": 3, "sofascore_name": "Javier Hernández", "team_name": "West Ham United"},
+        {"league": "ESP", "season": 2022, "sofascore_id": 4, "sofascore_name": "Rafinha Alcântara", "team_name": "Celta Vigo"},
+        {"league": "ESP", "season": 2022, "sofascore_id": 5, "sofascore_name": "Abner Vinícius", "team_name": "Real Betis"},
+        {"league": "ESP", "season": 2022, "sofascore_id": 6, "sofascore_name": "Pedro Porro", "team_name": "Real Betis"},
+        {"league": "ESP", "season": 2022, "sofascore_id": 7, "sofascore_name": "Pedro González", "team_name": "Real Betis"},
+    ])
+    players = pd.DataFrame({
+        "player_id": [10, 11, 12, 13, 14, 15],
+        "player_name": ["Min-jae Kim", "Joakim Maehle", "Chicharito", "Rafinha", "Abner", "Pedro"],
+        "season": [2023] * 6,
+        "origin_league_top5": ["ITA", "ITA", "ENG", "ESP", "ESP", "ESP"],
+        "other_club_name": ["SSC Napoli", "Atalanta BC", "West Ham United", "FC Barcelona", "Real Betis Balompié", "Real Betis Balompié"],
+    })
+    m = ss.match_league_players(players, rows).set_index("player_id")
+    assert m.loc[10, "sofascore_id"] == 1            # mesmas palavras, outra ordem
+    assert m.loc[11, "sofascore_id"] == 2            # 'æ' -> 'ae'
+    assert m.loc[12, "sofascore_id"] == 3            # alcunha conhecida
+    assert m.loc[13, "sofascore_id"] == 4            # nome contido, emprestado na mesma liga
+    assert m.loc[14, "sofascore_id"] == 5            # nome contido, no clube de origem
+    assert m.loc[15, "match_status"] == "ambiguous"  # dois 'Pedro' no clube: não se liga
+
+
+def test_normalize_name_keeps_nordic_letters():
+    assert ss.normalize_name("Joakim Mæhle") == "joakim maehle"
+    assert ss.normalize_name("Martin Ødegaard") == "martin odegaard"
+    assert ss.normalize_name("Łukasz Piszczek") == "lukasz piszczek"
