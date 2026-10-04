@@ -11,9 +11,12 @@ A data analytics project that evaluates the players of the 2026 summer transfer 
 
 ## Scope and inclusion criteria
 
-- **Leagues:** UEFA's top five (September of 2026).
-- **Period:** Summer of 2026.
-- **Elligible players:** Every player **bought**, excluding loans and Goalkeepers.
+- **Leagues:** UEFA's top five (September of 2026): Premier League, LaLiga, Serie A, Bundesliga, Ligue 1.
+- **Period:** Summer of 2026 is the window being judged. Summers 2019 to 2025 are used as history to train the fair-price model.
+- **Eligible players:** players **bought** by a top-5 club **from another top-5 club** (`only_top5_origin` in `config.yaml`). That gives 1,710 purchases from 2019 to 2026, 222 of them in summer 2026.
+- **Excluded:** goalkeepers, loans (including loans with an obligation to buy), free transfers and loan returns.
+- **Fee:** the fixed amount only, without bonuses or add-ons.
+- **Matches:** league matches only, for every player and every stat (no cups or European games).
 
 ## Data sources
 | Source        | Data                                             |
@@ -29,10 +32,15 @@ FBref lost its Opta data in January 2026 and ClubElo's API requires registration
 ## Methodology (planned)
 
 1. Data collection and integration from various sources
-2. Cleaning and normalization (metrics per 90 minutes, coins, bonuses)
+2. Cleaning and integration (one table per purchase, metrics per 90 minutes, market inflation)
 3. Exploratory analysis with percentiles and player profiles
-4. Regression model to estimate the "fair price"
-5. Performance monitoring throughout the 2026/27 season
+4. Regression model on log(fee) to estimate the "fair price", with Transfermarkt market value as a feature and prediction intervals
+5. Performance monitoring throughout the 2026/27 season (before/after per 90, cost/performance index, team results with and without the player)
+
+Rules set for the model:
+- Purchases with no league minutes in the season before stay out of the price model, but are still followed in phase 5.
+- Purchases with an unknown fee stay out of the model and of the ranking.
+- Origin-club strength is the club's league position in the season before (ClubElo is no longer available).
 
 ## Known limitations
 
@@ -45,7 +53,7 @@ FBref lost its Opta data in January 2026 and ClubElo's API requires registration
 ## Roadmap
 
 - [x] Phase 0 - Scope definition
-- [ ] Phase 1 - Data collection
+- [x] Phase 1 - Data collection (89% of purchases complete; weekly refresh every Monday)
 - [ ] Phase 2 - Cleaning and integration
 - [ ] Phase 3 - Exploratory analysis
 - [ ] Phase 4 - Fair price model
