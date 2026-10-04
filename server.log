@@ -1,0 +1,90 @@
+[I 2026-10-04 14:09:43.539 ServerApp] jupyter_lsp | extension was successfully linked.
+[I 2026-10-04 14:09:43.541 ServerApp] jupyter_server_terminals | extension was successfully linked.
+[I 2026-10-04 14:09:43.543 ServerApp] jupyterlab | extension was successfully linked.
+[I 2026-10-04 14:09:43.545 ServerApp] notebook | extension was successfully linked.
+[I 2026-10-04 14:09:43.671 ServerApp] notebook_shim | extension was successfully linked.
+[I 2026-10-04 14:09:43.696 ServerApp] notebook_shim | extension was successfully loaded.
+[I 2026-10-04 14:09:43.697 ServerApp] jupyter_lsp | extension was successfully loaded.
+[I 2026-10-04 14:09:43.698 ServerApp] jupyter_server_terminals | extension was successfully loaded.
+[I 2026-10-04 14:09:43.699 LabApp] JupyterLab extension loaded from /home/welepy/Documents/overpaid-or-bargain/.venv/lib/python3.14/site-packages/jupyterlab
+[I 2026-10-04 14:09:43.699 LabApp] JupyterLab application directory is /home/welepy/Documents/overpaid-or-bargain/.venv/share/jupyter/lab
+[I 2026-10-04 14:09:43.699 LabApp] Extension Manager is 'pypi'.
+[I 2026-10-04 14:09:43.938 ServerApp] jupyterlab | extension was successfully loaded.
+[I 2026-10-04 14:09:43.939 ServerApp] notebook | extension was successfully loaded.
+[I 2026-10-04 14:09:43.940 ServerApp] Serving notebooks from local directory: /home/welepy/Documents/overpaid-or-bargain
+[I 2026-10-04 14:09:43.940 ServerApp] Jupyter Server 2.21.1 is running at:
+[I 2026-10-04 14:09:43.940 ServerApp] http://localhost:8888/tree?token=d46036aa822943f58cf0a668661ba32f712b4bfee20190ae
+[I 2026-10-04 14:09:43.940 ServerApp]     http://127.0.0.1:8888/tree?token=d46036aa822943f58cf0a668661ba32f712b4bfee20190ae
+[I 2026-10-04 14:09:43.940 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[C 2026-10-04 14:09:43.997 ServerApp] 
+    
+    To access the server, open this file in a browser:
+        file:/home/welepy/.local/share/jupyter/runtime/jpserver-54852-open.html
+    Or copy and paste one of these URLs:
+        http://localhost:8888/tree?token=d46036aa822943f58cf0a668661ba32f712b4bfee20190ae
+        http://127.0.0.1:8888/tree?token=d46036aa822943f58cf0a668661ba32f712b4bfee20190ae
+[I 2026-10-04 14:09:44.064 ServerApp] Skipped non-installed server(s): basedpyright, bash-language-server, dockerfile-language-server-nodejs, javascript-typescript-langserver, jedi-language-server, julia-language-server, pyrefly, pyright, python-language-server, python-lsp-server, r-languageserver, sql-language-server, texlab, typescript-language-server, unified-language-server, vscode-css-languageserver-bin, vscode-html-languageserver-bin, vscode-json-languageserver-bin, yaml-language-server
+/usr/sbin/xdg-open: line 1045: x-www-browser: command not found
+[I 2026-10-04 14:10:12.633 ServerApp] Creating new directory in /data
+[I 2026-10-04 14:10:18.457 ServerApp] Creating new notebook in /data
+[I 2026-10-04 14:10:21.223 ServerApp] Kernel started: e49528c1-ee03-4683-ae7b-068efb86c50c
+[IPKernelApp] WARNING | Kernel is running over TCP without encryption. All communication (including code and outputs) is sent in plain text and is susceptible to eavesdropping. Use IPC transport or launch with kernel manager-provisioned CurveZMQ keys to enable transport encryption.
+[I 2026-10-04 14:10:21.831 ServerApp] Adapting from protocol version 5.3 (kernel e49528c1-ee03-4683-ae7b-068efb86c50c) to 5.4 (client).
+[I 2026-10-04 14:10:21.831 ServerApp] Connecting to kernel e49528c1-ee03-4683-ae7b-068efb86c50c.
+[W 2026-10-04 14:10:21.832 ServerApp] The websocket_ping_timeout (90000) cannot be longer than the websocket_ping_interval (30000).
+    Setting websocket_ping_timeout=30000
+[I 2026-10-04 14:10:21.834 ServerApp] Adapting from protocol version 5.3 (kernel e49528c1-ee03-4683-ae7b-068efb86c50c) to 5.4 (client).
+[I 2026-10-04 14:10:21.834 ServerApp] Connecting to kernel e49528c1-ee03-4683-ae7b-068efb86c50c.
+[I 2026-10-04 14:10:21.836 ServerApp] Adapting from protocol version 5.3 (kernel e49528c1-ee03-4683-ae7b-068efb86c50c) to 5.4 (client).
+[I 2026-10-04 14:10:21.836 ServerApp] Connecting to kernel e49528c1-ee03-4683-ae7b-068efb86c50c.
+[I 2026-10-04 14:10:26.459 ServerApp] Adapting from protocol version 5.3 (kernel e49528c1-ee03-4683-ae7b-068efb86c50c) to 5.4 (client).
+[I 2026-10-04 14:10:26.460 ServerApp] Connecting to kernel e49528c1-ee03-4683-ae7b-068efb86c50c.
+[I 2026-10-04 14:12:25.001 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 14:14:25.047 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 14:16:25.081 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 14:24:25.438 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 14:26:25.485 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 14:36:25.583 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 14:38:25.621 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 14:42:25.663 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 14:44:25.700 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:00:26.725 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:02:26.759 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:06:27.714 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:08:27.754 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:10:27.806 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:12:27.871 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:14:27.979 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:16:28.039 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:18:28.068 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:26:29.109 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:32:29.909 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:34:29.949 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:38:30.002 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:40:30.591 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:42:30.631 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:44:30.676 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:46:30.729 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:48:30.773 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:50:13.655 ServerApp] Adapting from protocol version 5.3 (kernel e49528c1-ee03-4683-ae7b-068efb86c50c) to 5.4 (client).
+[I 2026-10-04 15:50:13.657 ServerApp] Connecting to kernel e49528c1-ee03-4683-ae7b-068efb86c50c.
+[I 2026-10-04 15:50:14.363 ServerApp] Adapting from protocol version 5.3 (kernel e49528c1-ee03-4683-ae7b-068efb86c50c) to 5.4 (client).
+[I 2026-10-04 15:50:14.364 ServerApp] Connecting to kernel e49528c1-ee03-4683-ae7b-068efb86c50c.
+[I 2026-10-04 15:50:27.882 ServerApp] Adapting from protocol version 5.3 (kernel e49528c1-ee03-4683-ae7b-068efb86c50c) to 5.4 (client).
+[I 2026-10-04 15:50:27.882 ServerApp] Connecting to kernel e49528c1-ee03-4683-ae7b-068efb86c50c.
+[I 2026-10-04 15:50:28.545 ServerApp] Adapting from protocol version 5.3 (kernel e49528c1-ee03-4683-ae7b-068efb86c50c) to 5.4 (client).
+[I 2026-10-04 15:50:28.546 ServerApp] Connecting to kernel e49528c1-ee03-4683-ae7b-068efb86c50c.
+[I 2026-10-04 15:50:30.821 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:52:30.869 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:54:30.913 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 15:56:30.948 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 16:00:32.135 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 16:02:32.304 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 16:04:32.350 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 16:06:32.506 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 16:12:33.105 ServerApp] Saving file at /data/EDA.ipynb
+[I 2026-10-04 16:14:33.350 ServerApp] Saving file at /data/EDA.ipynb
+[C 2026-10-04 16:21:36.666 ServerApp] received signal 15, stopping
+[I 2026-10-04 16:21:36.670 ServerApp] Shutting down 5 extensions
+[I 2026-10-04 16:21:36.670 ServerApp] Shutting down 1 kernel
+[I 2026-10-04 16:21:36.671 ServerApp] Kernel shutdown: e49528c1-ee03-4683-ae7b-068efb86c50c

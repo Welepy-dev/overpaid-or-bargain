@@ -1,0 +1,16 @@
+metric_a,metric_b,ATT,DEF,MID,max_abs_rho
+us_goals_p90,us_np_goals_p90,0.95,0.999,0.961,0.999
+us_xg_p90,us_np_xg_p90,0.958,0.999,0.955,0.999
+us_key_passes_p90,ss_keyPasses_p90,0.996,0.997,0.997,0.997
+ss_tackles_p90,ss_tacklesWon_p90,0.949,0.907,0.935,0.949
+us_xa_p90,ss_bigChancesCreated_p90,0.918,0.912,0.903,0.918
+ss_accuratePasses_p90,ss_touches_p90,0.891,0.765,0.917,0.917
+ss_accuratePasses_p90,ss_accurateFinalThirdPasses_p90,0.913,0.021,0.62,0.913
+us_xa_p90,us_key_passes_p90,0.772,0.905,0.846,0.905
+us_xa_p90,ss_keyPasses_p90,0.776,0.902,0.845,0.902
+us_xg_chain_p90,us_xg_buildup_p90,0.589,0.887,0.794,0.887
+us_key_passes_p90,ss_accurateCrosses_p90,0.558,0.862,0.699,0.862
+ss_keyPasses_p90,ss_accurateCrosses_p90,0.565,0.861,0.703,0.861
+ss_accurateFinalThirdPasses_p90,ss_touches_p90,0.851,0.462,0.703,0.851
+ss_accuratePasses_p90,ss_pass_accuracy,0.714,0.811,0.758,0.811
+us_goals_p90,us_xg_p90,0.802,0.606,0.763,0.802

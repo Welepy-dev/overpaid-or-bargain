@@ -1,0 +1,42 @@
+feature,label,kind,rho,n,rho_ATT,rho_DEF,rho_MID
+log_mv_adjusted,"Market value before (log, adj.)",context,0.873,1252,,,
+pct_ss_rating,Sofascore rating,percentile,0.387,1251,0.358,0.349,0.467
+pct_us_xg_chain_p90,xGChain,percentile,0.368,1253,0.447,0.245,0.445
+age_at_transfer,Age,context,-0.354,1252,,,
+pct_us_xg_buildup_p90,xGBuildup,percentile,0.34,1253,0.328,0.285,0.428
+origin_ppg,Origin points per game,context,0.259,1253,,,
+pct_ss_accurateFinalThirdPasses_p90,Final-third passes,percentile,0.247,1251,0.241,0.114,0.416
+pct_ss_touches_p90,Touches,percentile,0.246,1251,0.113,0.304,0.332
+pct_ss_accuratePasses_p90,Accurate passes,percentile,0.243,1251,0.15,0.32,0.264
+origin_league_position,Origin league position,context,-0.243,1253,,,
+pct_us_xg_p90,xG,percentile,0.225,1253,0.238,0.261,0.19
+pct_us_np_xg_p90,NP xG,percentile,0.223,1253,0.24,0.263,0.18
+minutes_before,Minutes before,context,0.222,1253,,,
+pct_us_goals_p90,Goals,percentile,0.208,1253,0.272,0.215,0.139
+pct_ss_successfulDribbles_p90,Dribbles,percentile,0.206,1251,0.248,0.102,0.287
+pct_us_np_goals_p90,NP goals,percentile,0.2,1253,0.258,0.216,0.132
+pct_ss_pass_accuracy,Pass accuracy,percentile,0.2,1251,0.197,0.254,0.15
+pct_us_shots_p90,Shots,percentile,0.19,1253,0.251,0.128,0.208
+pct_us_xa_p90,xA,percentile,0.188,1253,0.335,-0.017,0.286
+pct_ss_bigChancesCreated_p90,Big chances created,percentile,0.164,1251,0.287,-0.03,0.264
+pct_us_assists_p90,Assists,percentile,0.153,1253,0.249,0.013,0.227
+pct_ss_blockedShots_p90,Blocked shots,percentile,0.146,1251,0.186,0.049,0.215
+pct_ss_duels_won_pct,Duels won %,percentile,0.141,1251,0.036,0.203,0.182
+origin_uefa_5y,Origin league UEFA 5y coef.,context,0.138,1253,,,
+pct_ss_keyPasses_p90,Key passes (Sofascore),percentile,0.136,1251,0.203,-0.013,0.254
+pct_us_key_passes_p90,Key passes,percentile,0.132,1253,0.199,-0.015,0.247
+pct_ss_possessionWonAttThird_p90,Possession won (att. third),percentile,0.131,1251,0.223,-0.028,0.22
+pct_ss_dribble_success,Dribble success,percentile,0.119,1243,0.124,0.132,0.104
+pct_ss_totalDuelsWon_p90,Duels won,percentile,0.109,1251,-0.016,0.146,0.197
+pct_ss_dribbledPast_p90,Dribbled past (inv.),percentile,0.107,1251,0.098,0.147,0.073
+pct_ss_fouls_p90,Fouls (inv.),percentile,0.086,1251,0.131,0.079,0.051
+pct_ss_accurateLongBalls_p90,Accurate long balls,percentile,0.07,1251,-0.018,0.096,0.131
+pct_ss_clearances_p90,Clearances,percentile,-0.053,1251,-0.113,0.022,-0.079
+pct_ss_possessionLost_p90,Possession lost (inv.),percentile,-0.036,1251,-0.014,0.069,-0.183
+pct_ss_wasFouled_p90,Fouled,percentile,0.023,1251,-0.024,-0.033,0.131
+pct_ss_accurateCrosses_p90,Accurate crosses,percentile,-0.023,1251,0.034,-0.139,0.048
+pct_ss_tackles_p90,Tackles,percentile,-0.021,1251,-0.097,-0.04,0.074
+pct_ss_interceptions_p90,Interceptions,percentile,-0.02,1251,-0.071,0.026,-0.014
+pct_ss_aerialDuelsWon_p90,Aerials won,percentile,-0.016,1251,-0.107,0.128,-0.09
+height_cm,Height,context,0.015,1252,,,
+pct_ss_tacklesWon_p90,Tackles won,percentile,-0.007,1251,-0.09,-0.012,0.084
