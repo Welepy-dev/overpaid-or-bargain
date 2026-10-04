@@ -29,18 +29,21 @@ A data analytics project that evaluates the players of the 2026 summer transfer 
 
 FBref lost its Opta data in January 2026 and ClubElo's API requires registration since September 2026, so neither is used by default.
 
-## Methodology (planned)
+## Methodology
 
-1. Data collection and integration from various sources
-2. Cleaning and integration (one table per purchase, metrics per 90 minutes, market inflation)
-3. Exploratory analysis with percentiles and player profiles
+1. Data collection from various sources (done)
+2. Cleaning and integration: one table per purchase, metrics per 90 minutes, market inflation (done)
+3. Exploratory analysis with percentiles and player profiles (in progress)
 4. Regression model on log(fee) to estimate the "fair price", with Transfermarkt market value as a feature and prediction intervals
 5. Performance monitoring throughout the 2026/27 season (before/after per 90, cost/performance index, team results with and without the player)
 
 Rules set for the model:
-- Purchases with no league minutes in the season before stay out of the price model, but are still followed in phase 5.
-- Purchases with an unknown fee stay out of the model and of the ranking.
-- Origin-club strength is the club's league position in the season before (ClubElo is no longer available).
+- Purchases with no league minutes in the season before (145) stay out of the price model, but are still followed in phase 5.
+- Purchases with an unknown fee (17) stay out of the model and of the ranking.
+- Origin-club strength is the club's league position in the season before, from league tables rebuilt from Understat results (ClubElo is no longer available).
+- Fees are compared across summers with `fee_adjusted` (fee deflated by each summer's median fee, relative to 2026).
+
+Resulting samples: 1,556 purchases in the price model (2019 to 2026), 206 of them in the summer 2026 ranking, and all 222 summer 2026 purchases followed in phase 5.
 
 ## Known limitations
 
@@ -50,12 +53,14 @@ Rules set for the model:
 
 - The price of a transfer depends on non-statistical factors (club emergency, clauses, marketing)
 
+- Rebuilt league tables ignore point deductions and head-to-head tie-breaks, so a few origin-club positions differ from the official table (e.g. Juventus 2022/23 shows 4th instead of 7th)
+
 ## Roadmap
 
 - [x] Phase 0 - Scope definition
 - [x] Phase 1 - Data collection (89% of purchases complete; weekly refresh every Monday)
 - [x] Phase 2 - Cleaning and integration (one table per purchase, `build` command)
-- [ ] Phase 3 - Exploratory analysis
+- [ ] Phase 3 - Exploratory analysis (in progress)
 - [ ] Phase 4 - Fair price model
 - [ ] Phase 5 - Performance in the new team
 - [ ] Phase 6 - Dashboard and communication
