@@ -1,0 +1,83 @@
+# Configuração central do pipeline. Alterar aqui, não no código.
+
+# Época em análise (ano de início: 2026 = 2026/27).
+season: 2026
+# Épocas de verões anteriores para o histórico do modelo (Fase 4).
+history_seasons: [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+
+# As 5 grandes ligas: código e slug do Transfermarkt, nome no soccerdata, id no Sofascore.
+leagues:
+  ENG:
+    tm_code: GB1
+    tm_slug: premier-league
+    soccerdata: ENG-Premier League
+    sofascore: 17             # unique-tournament do Sofascore
+  ESP:
+    tm_code: ES1
+    tm_slug: laliga
+    soccerdata: ESP-La Liga
+    sofascore: 8             # unique-tournament do Sofascore
+  ITA:
+    tm_code: IT1
+    tm_slug: serie-a
+    soccerdata: ITA-Serie A
+    sofascore: 23             # unique-tournament do Sofascore
+  GER:
+    tm_code: L1
+    tm_slug: bundesliga
+    soccerdata: GER-Bundesliga
+    sofascore: 35             # unique-tournament do Sofascore
+  FRA:
+    tm_code: FR1
+    tm_slug: ligue-1
+    soccerdata: FRA-Ligue 1
+    sofascore: 34             # unique-tournament do Sofascore
+
+# Regras de elegibilidade (decisões de 29/09/2026).
+eligibility:
+  exclude_goalkeepers: true
+  exclude_loans: true          # inclui empréstimos com obrigação de compra
+  exclude_free_transfers: true # jogador livre não foi "comprado"
+  exclude_returns: true        # regresso de empréstimo
+  # Só jogadores que chegam de clubes das 5 ligas (decisão de 03/10/2026): os
+  # outros não têm estatísticas comparáveis sem milhares de pedidos ao Sofascore.
+  only_top5_origin: true
+
+# Data de referência da força dos clubes (ClubElo), por verão: 1 de julho.
+# A API do ClubElo passou a exigir registo (set/2026); o passo é opcional.
+clubelo_reference_month_day: "07-01"
+
+# Fecho da janela de verão. Depois desta data os detalhes dos jogadores desse
+# verão (data, valor antes da transferência, perfil) ficam em cache para sempre.
+summer_window_close_month_day: "09-01"
+
+# Dataset público transfermarkt-datasets (CC0), congelado em jul/2026.
+# Dá histórico, valores de mercado e perfil dos verões até ``last_summer``;
+# só os jogadores que lá faltam são pedidos ao Transfermarkt.
+tm_dump:
+  base_url: https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data
+  last_summer: 2025
+
+# Ranking UEFA de países (força das ligas de origem), kassiesa.net.
+uefa:
+  ranking_url: https://kassiesa.net/uefa/data/method5/crank{year}.html
+
+http:
+  cache_dir: data/raw
+  min_interval_seconds: 3.0    # intervalo mínimo entre pedidos ao mesmo domínio
+  min_interval_by_source:
+    # O Transfermarkt bloqueou o IP (AWS WAF, "Human Verification") ao fim de
+    # ~450 pedidos a 3 s; mais devagar para o histórico completo.
+    transfermarkt: 10.0
+    # Sofascore: só os jogos de liga dos jogadores de fora das 5 ligas, mais rápido
+    # (decisão de 03/10/2026; se bloquear, o passo para e retoma pela cache).
+    sofascore: 1.5
+  timeout_seconds: 30
+  max_retries: 3
+  # Páginas que mudam (transferências da época corrente, estatísticas em curso)
+  # expiram ao fim de N horas; o resto fica em cache para sempre.
+  live_max_age_hours: 24
+  # Histórico, valores de mercado e perfil dos jogadores: mudam pouco e são
+  # milhares de pedidos, por isso duram mais (retomar não volta a pedi-los).
+  # Verões com a janela fechada não expiram (ver summer_window_close_month_day).
+  player_details_max_age_hours: 168
