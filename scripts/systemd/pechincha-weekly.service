@@ -1,0 +1,10 @@
+[Unit]
+Description=Sobrepago ou pechincha: recolha semanal da época 2026/27
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Documents/overpaid-or-bargain
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/Documents/overpaid-or-bargain/scripts/weekly.sh

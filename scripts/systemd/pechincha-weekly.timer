@@ -1,0 +1,11 @@
+[Unit]
+Description=Recolha semanal (segunda-feira às 09:00)
+
+[Timer]
+OnCalendar=Mon *-*-* 09:00:00
+# Se o PC estiver desligado à hora marcada, corre no arranque seguinte.
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target
