@@ -54,7 +54,7 @@ Rules set for the model:
 
 - [x] Phase 0 - Scope definition
 - [x] Phase 1 - Data collection (89% of purchases complete; weekly refresh every Monday)
-- [ ] Phase 2 - Cleaning and integration
+- [x] Phase 2 - Cleaning and integration (one table per purchase, `build` command)
 - [ ] Phase 3 - Exploratory analysis
 - [ ] Phase 4 - Fair price model
 - [ ] Phase 5 - Performance in the new team
@@ -92,6 +92,22 @@ Each run writes `logs/weekly_<date>.log`, ending with the duration and the numbe
 With `Persistent=true`, a run missed because the PC was off starts at the next login. User timers only run while you are logged in; `loginctl enable-linger $USER` lets them run without a session.
 The unit files are in `scripts/systemd/`; to remove the timer: `systemctl --user disable --now pechincha-weekly.timer`.
 
+## Cleaning and integration (phase 2)
+
+```bash
+uv run main.py build                      # offline: reads data/interim and the cache, no requests
+```
+
+Writes `data/processed/purchases.parquet` (and `.csv`): one row per purchase (summer, player, buying club), 1,710 rows. Each row has the fee, the Transfermarkt profile, the league stats of the season before (Understat and Sofascore, totals and per 90 minutes), the origin club's league position that season, the UEFA rank of the origin league and the model rules. League tables are rebuilt from the cached Understat results into `data/processed/league_tables.parquet`.
+
+- **Bought twice in one summer:** 14 players were bought by two clubs in the same summer (an option exercised and an immediate resale, e.g. Cucurella 2019). Both purchases are real and stay, flagged `bought_twice_in_summer`. Links to Sofascore and Understat belong to the player, so they are joined after removing repeats and no longer duplicate rows.
+- **Understat link:** by name, using both the Transfermarkt and the Sofascore name: origin club, origin league, top 5, then last name and nested names at the origin club. Players on loan elsewhere are found at the team Sofascore puts them in that season (Emerson at Betis, Kalulu at Juventus). Every purchase with league minutes is linked. Links that need a human go to `data/manual/understat_links.csv` (fill `understat_id`, run `build` again).
+- **Manual Sofascore fixes:** filled rows in `data/manual/sofascore_links.csv` now also override the collected link in `build`, without re-collecting.
+- **Model rules:** `in_price_model` leaves out unknown fees (17) and purchases with no league minutes the season before (145, 8 of them also with unknown fee); `in_ranking` is the 2026 subset of the model; `in_phase5` keeps every 2026 purchase. `model_exclusion` says why a row is out.
+- **Market inflation:** `fee_adjusted` divides the fee by `fee_index`, the median known fee of that summer relative to summer 2026.
+- **Checks:** `link_conflict` flags rows where Understat and Sofascore minutes disagree by more than 25% (none after the fixes).
+- **League position limits:** ordered by points per game, goal difference and goals scored. Head-to-head tie-breaks and point deductions are not applied (Juventus 2022/23 shows 4th instead of 7th).
+
 ## Repository structure
 
 ```
@@ -100,10 +116,11 @@ The unit files are in `scripts/systemd/`; to remove the timer: `systemctl --user
 ├── main.py
 ├── src/pechincha/
 │   ├── config.py, http.py, pipeline.py, cli.py
+│   ├── build.py         # phase 2: one table per purchase (offline)
 │   └── ingest/          # transfermarkt, tm_dump, understat, sofascore, uefa, clubelo
 ├── scripts/             # weekly refresh and its systemd timer
 ├── tests/               # offline tests with fixtures
-├── data/                # raw/ cache and interim/ tables (not in git)
+├── data/                # raw/ cache, interim/ and processed/ tables (not in git); manual/ links (in git)
 ├── notes.txt
 ├── pyproject.toml
 └── uv.lock
