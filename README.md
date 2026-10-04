@@ -68,6 +68,22 @@ Every downloaded page is cached in `data/raw/`; tables are written to `data/inte
 A failing step is logged and the next steps still run. Sofascore needs Chromium (set `PECHINCHA_BROWSER` if it is not found).
 Player details for summers up to 2025 come from the public dump; only players missing from it are requested from Transfermarkt. Once a summer window has closed, its player pages are cached for good, so the weekly refresh only fetches new players.
 
+### Weekly refresh (scheduled)
+
+The summer window is closed, so transfers and Transfermarkt details are final. Each week only the 2026/27 season stats are refreshed:
+`uv run main.py collect --current-only --steps understat sofascore_leagues` (about 5 Understat and ~30 Sofascore requests, under 2 minutes; no Transfermarkt requests).
+
+```bash
+./scripts/install_weekly.sh                   # systemd user timer: Mondays at 09:00
+./scripts/weekly.sh                           # run it now by hand
+systemctl --user list-timers pechincha-weekly.timer
+journalctl --user -u pechincha-weekly.service
+```
+
+Each run writes `logs/weekly_<date>.log`, ending with the duration and the number of requests per source (pages added to or renewed in the cache).
+With `Persistent=true`, a run missed because the PC was off starts at the next login. User timers only run while you are logged in; `loginctl enable-linger $USER` lets them run without a session.
+The unit files are in `scripts/systemd/`; to remove the timer: `systemctl --user disable --now pechincha-weekly.timer`.
+
 ## Repository structure
 
 ```
@@ -77,6 +93,7 @@ Player details for summers up to 2025 come from the public dump; only players mi
 ├── src/pechincha/
 │   ├── config.py, http.py, pipeline.py, cli.py
 │   └── ingest/          # transfermarkt, tm_dump, understat, sofascore, uefa, clubelo
+├── scripts/             # weekly refresh and its systemd timer
 ├── tests/               # offline tests with fixtures
 ├── data/                # raw/ cache and interim/ tables (not in git)
 ├── notes.txt
