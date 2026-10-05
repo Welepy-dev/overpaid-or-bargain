@@ -637,8 +637,8 @@ name = "mouseinfo"
 version = "0.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyperclip", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "python3-xlib", marker = "sys_platform == 'linux'" },
+    { name = "pyperclip" },
+    { name = "python3-xlib" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/28/fa/b2ba8229b9381e8f6381c1dcae6f4159a7f72349e414ed19cfbbd1817173/MouseInfo-0.1.3.tar.gz", hash = "sha256:2c62fb8885062b8e520a3cce0a297c657adcc08c60952eb05bc8256ef6f7f6e7", size = 10850, upload-time = "2020-03-27T21:20:10.136Z" }
 
@@ -649,6 +649,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/bf/3e/8ec13aadc92724c20c470ac2c5cf9386ea785daa5681b6e3bf8043c2a7ff/mycdp-1.4.0.tar.gz", hash = "sha256:6a6c18cefbf7a5a4c17be3d00fcd2cac05497b03f995e52f05abfbfbee5ab42e", size = 246353, upload-time = "2026-06-13T05:23:28.631Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f3/0a/c72f4357272634bb1db2c94e414fd5ac03304603dc9a51551955e26deee4/mycdp-1.4.0-py3-none-any.whl", hash = "sha256:e4723c4b3d52dc7962ced497beb4a201431bdfc813f8bb653376498b8f217411", size = 275242, upload-time = "2026-06-13T05:23:27.326Z" },
+]
+
+[[package]]
+name = "narwhals"
+version = "2.26.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/68/5351e34623d253423240ea7de3f8fc74fa8ab14b1ab3c0ec4ac8997413c9/narwhals-2.26.0.tar.gz", hash = "sha256:6b9cadca82f375c7e4cf584fdc86ca25da54827307a9c58f94547ee6104b82dd", size = 686970, upload-time = "2026-09-08T13:32:08.964Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/40/b5/1b84b2c784db76d69442334bc8b8748c840f13ca53be086f4f250ad4a0bc/narwhals-2.26.0-py3-none-any.whl", hash = "sha256:29326d74f107c347fd1009bd58e38d9f7c7c5b51e6de97bc93dbc325d9038b54", size = 474034, upload-time = "2026-09-08T13:32:07.159Z" },
 ]
 
 [[package]]
@@ -753,6 +762,7 @@ dependencies = [
     { name = "lxml" },
     { name = "matplotlib" },
     { name = "pandas" },
+    { name = "plotly" },
     { name = "pyarrow" },
     { name = "pyyaml" },
     { name = "requests" },
@@ -771,6 +781,7 @@ requires-dist = [
     { name = "lxml", specifier = ">=6.1.3" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "pandas", specifier = ">=3.0.6" },
+    { name = "plotly", specifier = ">=7.1.0" },
     { name = "pyarrow", specifier = ">=25.0.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", specifier = ">=2.34.2" },
@@ -940,6 +951,19 @@ wheels = [
 ]
 
 [[package]]
+name = "plotly"
+version = "7.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "narwhals" },
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/49/c3/72b369f5ed7701b04ab0ea3dcf83e9bbce71c0b3bc6f07f87568550d09ea/plotly-7.1.0.tar.gz", hash = "sha256:f860166a4a3d78c69cb1f4a15f28a5c8283eade98a282a698f3bb853a449ace5", size = 6689315, upload-time = "2026-09-15T19:21:21.75Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/7d/905a3a3d51087515719058c94cfbda2ff0fc14417c20d557ae3e82d8b250/plotly-7.1.0-py3-none-any.whl", hash = "sha256:dbb7fa18afce40d0a8e80d1bf162eceb3faa0ce5a77fe741ad09a74cf78f53f3", size = 9692368, upload-time = "2026-09-15T19:21:18.331Z" },
+]
+
+[[package]]
 name = "pluggy"
 version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -997,12 +1021,12 @@ name = "pyautogui"
 version = "0.9.54"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mouseinfo", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "pygetwindow", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "pymsgbox", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "pyscreeze", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "python3-xlib", marker = "sys_platform == 'linux'" },
-    { name = "pytweening", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "mouseinfo" },
+    { name = "pygetwindow" },
+    { name = "pymsgbox" },
+    { name = "pyscreeze" },
+    { name = "python3-xlib" },
+    { name = "pytweening" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/65/ff/cdae0a8c2118a0de74b6cf4cbcdcaf8fd25857e6c3f205ce4b1794b27814/PyAutoGUI-0.9.54.tar.gz", hash = "sha256:dd1d29e8fd118941cb193f74df57e5c6ff8e9253b99c7b04f39cfc69f3ae04b2", size = 61236, upload-time = "2023-05-24T20:11:32.972Z" }
 
@@ -1020,7 +1044,7 @@ name = "pygetwindow"
 version = "0.0.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyrect", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "pyrect" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e1/70/c7a4f46dbf06048c6d57d9489b8e0f9c4c3d36b7479f03c5ca97eaa2541d/PyGetWindow-0.0.9.tar.gz", hash = "sha256:17894355e7d2b305cd832d717708384017c1698a90ce24f6f7fbf0242dd0a688", size = 9699, upload-time = "2020-10-04T02:12:50.806Z" }
 
@@ -1205,7 +1229,7 @@ name = "python-xlib"
 version = "0.33"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "six", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/86/f5/8c0653e5bb54e0cbdfe27bf32d41f27bc4e12faa8742778c17f2a71be2c0/python-xlib-0.33.tar.gz", hash = "sha256:55af7906a2c75ce6cb280a584776080602444f75815a7aff4d287bb2d7018b32", size = 269068, upload-time = "2022-12-25T18:53:00.824Z" }
 wheels = [
