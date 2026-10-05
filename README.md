@@ -121,7 +121,7 @@ A ridge regression on log(fixed fee in 2026 prices), trained on the 1,086 price-
 - **Market value carries most of the signal:** it alone explains 71% of the variance in log fee on unseen summers; the full model 77%. The stats add little on top, because Transfermarkt values already price them in.
 - **Buying league is a feature,** so the fair price is fair for a club in that league (the Premier League premium counts as the market).
 
-Writes `outputs/model/`: `ranking_2026.csv`/`.json` (fee, fair price, interval, verdict and each feature group's part of the prediction), `model_comparison.csv`, `coefficients.csv`, `cv_by_summer.csv`, five Plotly charts (`.html` + `.json`) and `summary.md`. Predictions for every model purchase go to `data/processed/fair_price.parquet` (out-of-sample for 2019–2025).
+Writes `outputs/model/`: `ranking_2026.csv`/`.json` (fee, fair price, interval, verdict and each feature group's part of the prediction), `verdicts_2026.csv` (how many purchases fall below, inside and above the interval, by buying league and position), `model_comparison.csv`, `coefficients.csv`, `cv_by_summer.csv`, seven Plotly charts (`.html` + `.json`) and `summary.md`. Predictions for every model purchase go to `data/processed/fair_price.parquet` (out-of-sample for 2019–2025).
 
 ## Repository structure
 
