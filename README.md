@@ -33,17 +33,17 @@ FBref lost its Opta data in January 2026 and ClubElo's API requires registration
 
 1. Data collection from various sources (done)
 2. Cleaning and integration: one table per purchase, metrics per 90 minutes, market inflation (done)
-3. Exploratory analysis with percentiles and player profiles (in progress)
-4. Regression model on log(fee) to estimate the "fair price", with Transfermarkt market value as a feature and prediction intervals
-5. Performance monitoring throughout the 2026/27 season (before/after per 90, cost/performance index, team results with and without the player)
+3. Exploratory analysis with percentiles and player profiles (done)
+4. Ridge regression on log(fee) to estimate the "fair price", with Transfermarkt market value and the buying league as features and an 80% prediction interval (done)
+5. Performance monitoring throughout the 2026/27 season: before/after per 90, cost/performance index, team results with and without the player (in progress)
 
 Rules set for the model:
-- Purchases with no league minutes in the season before (145) stay out of the price model, but are still followed in phase 5.
+- Purchases with fewer than 900 league minutes in the season before (none at all included) stay out of the price model, but are still followed in phase 5.
 - Purchases with an unknown fee (17) stay out of the model and of the ranking.
 - Origin-club strength is the club's league position in the season before, from league tables rebuilt from Understat results (ClubElo is no longer available).
 - Fees are compared across summers with `fee_adjusted` (fee deflated by each summer's median fee, relative to 2026).
 
-Resulting samples: 1,556 purchases in the price model (2019 to 2026), 206 of them in the summer 2026 ranking, and all 222 summer 2026 purchases followed in phase 5.
+Resulting samples: 1,253 purchases in the price model (1,086 for training, 2019 to 2025, and 167 ranked for summer 2026), and all 222 summer 2026 purchases followed in phase 5. First ranking: 22 overpaid, 129 fair, 16 bargains.
 
 ## Known limitations
 
@@ -53,6 +53,8 @@ Resulting samples: 1,556 purchases in the price model (2019 to 2026), 206 of the
 
 - The price of a transfer depends on non-statistical factors (club emergency, clauses, marketing)
 
+- Transfermarkt market value explains most of the fee (R² 0.71 on unseen summers, 0.77 with the full model), so the stats mainly explain the gap to it
+
 - Rebuilt league tables ignore point deductions and head-to-head tie-breaks, so a few origin-club positions differ from the official table (e.g. Juventus 2022/23 shows 4th instead of 7th)
 
 ## Roadmap
@@ -60,9 +62,9 @@ Resulting samples: 1,556 purchases in the price model (2019 to 2026), 206 of the
 - [x] Phase 0 - Scope definition
 - [x] Phase 1 - Data collection (89% of purchases complete; weekly refresh every Monday)
 - [x] Phase 2 - Cleaning and integration (one table per purchase, `build` command)
-- [ ] Phase 3 - Exploratory analysis (in progress)
-- [ ] Phase 4 - Fair price model
-- [ ] Phase 5 - Performance in the new team
+- [x] Phase 3 - Exploratory analysis (`eda` command)
+- [x] Phase 4 - Fair price model (`model` command)
+- [ ] Phase 5 - Performance in the new team (in progress)
 - [ ] Phase 6 - Dashboard and communication
 
 ## Data collection (phase 1)
@@ -108,10 +110,33 @@ Writes `data/processed/purchases.parquet` (and `.csv`): one row per purchase (su
 - **Bought twice in one summer:** 14 players were bought by two clubs in the same summer (an option exercised and an immediate resale, e.g. Cucurella 2019). Both purchases are real and stay, flagged `bought_twice_in_summer`. Links to Sofascore and Understat belong to the player, so they are joined after removing repeats and no longer duplicate rows.
 - **Understat link:** by name, using both the Transfermarkt and the Sofascore name: origin club, origin league, top 5, then last name and nested names at the origin club. Players on loan elsewhere are found at the team Sofascore puts them in that season (Emerson at Betis, Kalulu at Juventus). Every purchase with league minutes is linked. Links that need a human go to `data/manual/understat_links.csv` (fill `understat_id`, run `build` again).
 - **Manual Sofascore fixes:** filled rows in `data/manual/sofascore_links.csv` now also override the collected link in `build`, without re-collecting.
-- **Model rules:** `in_price_model` leaves out unknown fees (17) and purchases with no league minutes the season before (145, 8 of them also with unknown fee); `in_ranking` is the 2026 subset of the model; `in_phase5` keeps every 2026 purchase. `model_exclusion` says why a row is out.
+- **Model rules:** `in_price_model` leaves out unknown fees (17), purchases with no league minutes the season before (137) and purchases with fewer than 900 (303; `price_model.min_minutes_before` in `config.yaml`); `in_ranking` is the 2026 subset of the model; `in_phase5` keeps every 2026 purchase. `model_exclusion` says why a row is out.
 - **Market inflation:** `fee_adjusted` divides the fee by `fee_index`, the median known fee of that summer relative to summer 2026.
 - **Checks:** `link_conflict` flags rows where Understat and Sofascore minutes disagree by more than 25% (none after the fixes).
 - **League position limits:** ordered by points per game, goal difference and goals scored. Head-to-head tie-breaks and point deductions are not applied (Juventus 2022/23 shows 4th instead of 7th).
+
+## Exploratory analysis (phase 3)
+
+```bash
+uv run main.py eda                        # offline: reads data/processed/purchases.parquet
+```
+
+Writes 17 Plotly charts (`.html` + `.json`), the tables behind them (`.csv`) and `summary.md` to `outputs/eda/`, and per-position percentiles to `data/processed/percentiles.parquet` for the model. Percentiles compare each purchase with price-model purchases in the same position with at least 900 league minutes the season before; purchases with fewer minutes also get one, flagged `low_minutes`. The correlation charts found 15 near-duplicate per-90 pairs, and the model keeps one of each.
+
+## Fair-price model (phase 4)
+
+```bash
+uv run main.py build && uv run main.py eda   # tables and percentiles the model reads
+uv run main.py model                          # offline: reads data/processed only
+```
+
+A ridge regression on log(fixed fee in 2026 prices), trained on the 1,086 price-model purchases of 2019–2025 and applied to the 167 of summer 2026. Features come from an explicit list (`FEATURES` in `src/pechincha/model/fair_price.py`): Transfermarkt value before the transfer, age, league minutes, origin club's league position and origin league, position group, buying league and 16 per-position percentiles (one of each redundant pair from the EDA). Alpha is chosen by predicting each past summer from the others; the 80% interval comes from those out-of-sample errors. A fee above the interval is **overpaid**, below it a **bargain**.
+
+- **Small sample:** about 1,100 purchases for ~30 features. Read each player's verdict with its interval.
+- **Market value carries most of the signal:** it alone explains 71% of the variance in log fee on unseen summers; the full model 77%. The stats add little on top, because Transfermarkt values already price them in.
+- **Buying league is a feature,** so the fair price is fair for a club in that league (the Premier League premium counts as the market).
+
+Writes `outputs/model/`: `ranking_2026.csv`/`.json` (fee, fair price, interval, verdict and each feature group's part of the prediction), `model_comparison.csv`, `coefficients.csv`, `cv_by_summer.csv`, five Plotly charts (`.html` + `.json`) and `summary.md`. Predictions for every model purchase go to `data/processed/fair_price.parquet` (out-of-sample for 2019–2025).
 
 ## Repository structure
 
@@ -122,6 +147,9 @@ Writes `data/processed/purchases.parquet` (and `.csv`): one row per purchase (su
 ├── src/pechincha/
 │   ├── config.py, http.py, pipeline.py, cli.py
 │   ├── build.py         # phase 2: one table per purchase (offline)
+│   ├── eda/             # phase 3: percentiles and exploratory charts
+│   ├── model/           # phase 4: fair-price model and 2026 ranking
+│   ├── report/          # Plotly theme and export
 │   └── ingest/          # transfermarkt, tm_dump, understat, sofascore, uefa, clubelo
 ├── scripts/             # weekly refresh and its systemd timer
 ├── tests/               # offline tests with fixtures

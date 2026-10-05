@@ -1,4 +1,4 @@
-"""Linha de comandos: ``uv run main.py collect [--steps ...] [--current-only] [--no-refresh]`` e ``build``."""
+"""Linha de comandos: ``uv run main.py collect [--steps ...] [--current-only] [--no-refresh]``, ``build``, ``eda`` e ``model``."""
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ def main(argv: list[str] | None = None) -> None:
     collect.add_argument("--current-only", action="store_true", help="só a época corrente (execução semanal)")
     collect.add_argument("--no-refresh", action="store_true", help="não renovar a cache da época corrente: o que já está em cache lê-se de lá")
     sub.add_parser("build", help="Fase 2: tabela por compra (offline, só lê data/interim e a cache)")
+    sub.add_parser("eda", help="Fase 3: análise exploratória (offline, só lê data/processed)")
+    sub.add_parser("model", help="Fase 4: modelo de preço justo e ranking (offline, só lê data/processed)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -33,3 +35,11 @@ def main(argv: list[str] | None = None) -> None:
         from . import build
 
         build.run(cfg)
+    elif args.command == "eda":
+        from . import eda
+
+        eda.run(cfg)
+    elif args.command == "model":
+        from . import model
+
+        model.run(cfg)

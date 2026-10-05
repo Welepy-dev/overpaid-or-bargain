@@ -148,3 +148,9 @@ def test_build_purchases_keeps_double_purchases_and_applies_rules():
     assert rows.loc["Nobody Played", "model_exclusion"] == "no_league_minutes_before"
     assert rows.loc["Nobody Played", "origin_uefa_rank"] == 3
     assert df["in_price_model"].sum() == 2 and not df["link_conflict"].any()
+
+    # Mínimo de minutos: o Emerson (2992 min) fica fora com 3000, mas segue na tabela.
+    strict = build.build_purchases(purchases(), u, stats, links, ulinks, clubs, tables, ranking, min_minutes=3000)
+    emerson = strict[strict["player_id"] == 476344]
+    assert (emerson["model_exclusion"] == "under_min_minutes_before").all() and not emerson["in_price_model"].any()
+    assert strict.set_index("player_name").loc["Nobody Played", "model_exclusion"] == "no_league_minutes_before"
