@@ -31,6 +31,7 @@ class Config:
     summer_window_close_month_day: str = "09-01"
     tm_dump: dict = field(default_factory=dict)
     uefa: dict = field(default_factory=dict)
+    price_model: dict = field(default_factory=dict)
     root: Path = ROOT
 
     @property
@@ -69,5 +70,6 @@ def load_config(path: Path | None = None) -> Config:
         summer_window_close_month_day=raw.get("summer_window_close_month_day", "09-01"),
         tm_dump=raw.get("tm_dump", {}),
         uefa=raw.get("uefa", {}),
+        price_model=raw.get("price_model", {}),
         root=path.parent,
     )

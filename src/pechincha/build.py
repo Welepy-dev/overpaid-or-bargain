@@ -98,7 +98,8 @@ def run(cfg: Config) -> pd.DataFrame:
     clubs = club_map(load(inter / "tm_top5_clubs.parquet"), understat)
     tables = league_tables(cfg.cache_dir / "understat", understat)
     links = link_understat(purchases, understat, sofa_links, sofa_stats, clubs, read_manual_links(cfg))
-    df = build_purchases(purchases, understat, sofa_stats, sofa_links, links, clubs, tables, ranking)
+    df = build_purchases(purchases, understat, sofa_stats, sofa_links, links, clubs, tables, ranking,
+                         min_minutes=cfg.price_model.get("min_minutes_before", 900))
 
     save(tables, out / "league_tables.parquet")
     save(df, out / "purchases.parquet")
@@ -392,6 +393,7 @@ def build_purchases(
     clubs: pd.DataFrame,
     tables: pd.DataFrame,
     ranking: pd.DataFrame,
+    min_minutes: float = 900,
 ) -> pd.DataFrame:
     df = purchases.drop_duplicates(["season", "player_id", "club_id"]).copy()
     df = df.rename(columns={"season": "summer"})
@@ -453,9 +455,10 @@ def build_purchases(
     df["fee_index"] = df["summer"].map(median / median.loc[median.index.max()])
     df["fee_adjusted"] = df["fee"] / df["fee_index"]
 
-    # Regras do modelo (decisões de 04/10/2026).
+    # Regras do modelo (decisões de 04/10/2026; mínimo de minutos de 05/10/2026).
     df["no_minutes_before"] = df["minutes_before"] <= 0
     reason = pd.Series(None, index=df.index, dtype=object)
+    reason[df["minutes_before"] < min_minutes] = "under_min_minutes_before"
     reason[df["no_minutes_before"]] = "no_league_minutes_before"
     reason[~df["fee_known"].astype(bool)] = "unknown_fee"
     df["model_exclusion"] = reason
