@@ -124,6 +124,8 @@ def run(cfg: Config) -> dict:
     summary = {"n_train": len(train), "n_rank": len(current), "alpha": alpha, "band": band, "comparison": comparison,
                "by_summer": by_summer, "coefs": coefs, "ranking": table, "excluded_2026": excluded_counts(df)}
     summary["groups"] = group_importance(model, train[cols])
+    summary["verdicts"] = verdict_counts(table)
+    summary["verdicts"].to_csv(out / "verdicts_2026.csv", index=False)
     charts(history, ranking, comparison, coefs, summary, out)
     (out / "summary.md").write_text(summary_markdown(summary), encoding="utf-8")
     counts = table["verdict"].value_counts().to_dict()
@@ -236,6 +238,22 @@ def group_importance(model: Ridge, X: pd.DataFrame) -> pd.Series:
     return pd.Series({g: contrib[cols].sum(axis=1).std() for g, cols in FEATURES.items()}).sort_values(ascending=False)
 
 
+def verdict_counts(table: pd.DataFrame) -> pd.DataFrame:
+    """Compras abaixo, dentro e acima do intervalo: no total, por liga compradora e por posição."""
+    parts = [table.assign(group="All purchases", dimension="all"),
+             table.assign(group=table["buying_league"], dimension="buying league"),
+             table.assign(group=table["position_group"].map(POSITION_LABELS), dimension="position")]
+    t = pd.concat(parts).groupby(["dimension", "group"], sort=False)["verdict"].value_counts().unstack(fill_value=0)
+    t = t.reindex(columns=["Bargain", "Fair", "Overpaid"], fill_value=0)
+    t["n"] = t.sum(axis=1)
+    t["overpaid_pct"] = (t["Overpaid"] / t["n"] * 100).round(1)
+    t["bargain_pct"] = (t["Bargain"] / t["n"] * 100).round(1)
+    t = t.reset_index()
+    # Total primeiro; dentro de cada dimensão, das mais sobrepagas às menos.
+    order = t["dimension"].map({"all": 0, "buying league": 1, "position": 2})
+    return t.assign(_o=order).sort_values(["_o", "overpaid_pct"], ascending=[True, False]).drop(columns="_o").reset_index(drop=True)
+
+
 def excluded_counts(df: pd.DataFrame) -> dict:
     cur = df[df["summer"] == SEASON]
     return {"total": len(cur), **cur["model_exclusion"].value_counts().to_dict()}
@@ -333,6 +351,26 @@ def charts(history: pd.DataFrame, ranking: pd.DataFrame, comparison: pd.DataFram
     style(fig, "Back-test: each past summer predicted from the others", f"n={len(h):,} purchases 2019–2025; {inside:.0f}% fall inside the 80% interval.")
     export(fig, out, "05_backtest")
 
+    # 6 e 7. Quantas compras ficam abaixo, dentro e acima do intervalo, por liga compradora e posição.
+    t = s["verdicts"]
+    for name, dim, title in [("06_verdicts_by_league_2026", "buying league", "by buying league"),
+                             ("07_verdicts_by_position_2026", "position", "by position")]:
+        g = t[t["dimension"].isin(["all", dim])].iloc[::-1]
+        fig = go.Figure()
+        for verdict, label in [("Bargain", "Bargain (below)"), ("Fair", "Fair (inside)"), ("Overpaid", "Overpaid (above)")]:
+            share = g[verdict] / g["n"] * 100
+            fig.add_trace(go.Bar(
+                x=share, y=g["group"] + " (n=" + g["n"].astype(str) + ")", orientation="h", name=label,
+                marker=dict(color=VERDICT_COLORS[verdict], line=dict(width=2, color="#fcfcfb")), customdata=g[verdict],
+                text=g[verdict].where(g[verdict] > 0, "").astype(str), textposition="inside", insidetextanchor="middle",
+                textfont=dict(color="white"), hovertemplate=f"%{{y}}<br>{verdict}: %{{customdata}} (%{{x:.0f}}%)<extra></extra>"))
+        fig.update_layout(barmode="stack", legend_traceorder="normal", height=420 if dim == "position" else 480, margin=dict(l=220))
+        fig.update_xaxes(title="Share of purchases (%); number inside each bar = purchases", ticksuffix="%", range=[0, 100])
+        all_row = t[t["dimension"] == "all"].iloc[0]
+        style(fig, f"Fair, overpaid or bargain {title}, summer {SEASON}",
+              f"{all_row['Bargain']} below, {all_row['Fair']} inside and {all_row['Overpaid']} above the 80% fair-price interval (n={all_row['n']}).")
+        export(fig, out, name)
+
 
 # --------------------------------------------------------------------------- resumo
 
@@ -387,6 +425,12 @@ def summary_markdown(s: dict) -> str:
         f"## Summer {SEASON}",
         f"- {counts.get('Overpaid', 0)} overpaid, {counts.get('Fair', 0)} fair, {counts.get('Bargain', 0)} bargains (n={len(t)}).",
         "",
+        "| Group | n | Bargain | Fair | Overpaid |",
+        "|---|---|---|---|---|",
+        *[f"| {r.group} | {r.n} | {r.Bargain} | {r.Fair} | {r.Overpaid} |" for r in s["verdicts"].itertuples()],
+        "",
+        "Small groups (a dozen purchases or fewer) swing a lot with one or two deals.",
+        "",
         "Most overpaid (fee ÷ fair price):",
         "",
         "| # | Player | Buyer | Fee | Fair (80% interval) | Ratio |",
@@ -404,6 +448,7 @@ def summary_markdown(s: dict) -> str:
         "## Files",
         "- `ranking_2026.csv` / `.json`: every ranked purchase with fee, fair price, interval, verdict and `contrib_*` "
         "(each feature group's part of the predicted log price, relative to the average training purchase).",
+        "- `verdicts_2026.csv`: purchases below, inside and above the interval, overall, by buying league and by position.",
         "- `model_comparison.csv`, `alpha_search.csv`, `cv_by_summer.csv`, `coefficients.csv`.",
         "",
         "## Limits",

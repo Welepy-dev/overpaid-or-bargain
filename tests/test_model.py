@@ -75,9 +75,15 @@ def test_run_writes_ranking_predictions_and_charts(cfg):
 
     out = cfg.root / "outputs" / "model"
     charts = sorted(p.stem for p in out.glob("*.html"))
-    assert charts == ["01_fee_vs_fair_2026", "02_ranking_2026", "03_coefficients", "04_model_comparison", "05_backtest"]
+    assert charts == ["01_fee_vs_fair_2026", "02_ranking_2026", "03_coefficients", "04_model_comparison", "05_backtest",
+                      "06_verdicts_by_league_2026", "07_verdicts_by_position_2026"]
     assert {p.stem for p in out.glob("*.json")} == set(charts) | {"ranking_2026"}
-    for table in ["ranking_2026", "model_comparison", "alpha_search", "cv_by_summer", "coefficients"]:
+    verdicts = pd.read_csv(out / "verdicts_2026.csv")
+    total = verdicts[verdicts["dimension"] == "all"].iloc[0]
+    assert total["n"] == len(pd.read_csv(out / "ranking_2026.csv")) == total[["Bargain", "Fair", "Overpaid"]].sum()
+    for dim in ["buying league", "position"]:  # cada dimensão reparte o total
+        assert verdicts.loc[verdicts["dimension"] == dim, ["Bargain", "Fair", "Overpaid"]].sum().tolist() == total[["Bargain", "Fair", "Overpaid"]].tolist()
+    for table in ["ranking_2026", "verdicts_2026", "model_comparison", "alpha_search", "cv_by_summer", "coefficients"]:
         assert (out / f"{table}.csv").exists(), table
     assert "2026" in (out / "summary.md").read_text(encoding="utf-8")
 
