@@ -55,9 +55,9 @@ Rules set for the model:
 - [x] Phase 0 - Scope definition
 - [x] Phase 1 - Data collection (89% of purchases complete; weekly refresh every Monday)
 - [x] Phase 2 - Cleaning and integration (one table per purchase, `build` command)
-- [ ] Phase 3 - Exploratory analysis
-- [ ] Phase 4 - Fair price model (first version: `model` command)
-- [ ] Phase 5 - Performance in the new team
+- [x] Phase 3 - Exploratory analysis (`eda` command)
+- [x] Phase 4 - Fair price model (`model` command)
+- [ ] Phase 5 - Performance in the new team (first version: `performance` command, updated weekly through the season)
 - [ ] Phase 6 - Dashboard and communication
 
 ## Data collection (phase 1)
@@ -79,7 +79,7 @@ Player details for summers up to 2025 come from the public dump; only players mi
 ### Weekly refresh (scheduled)
 
 The summer window is closed, so transfers and Transfermarkt details are final. Each week only the 2026/27 season stats are refreshed:
-`uv run main.py collect --current-only --steps understat sofascore_leagues` (about 5 Understat and ~30 Sofascore requests, under 2 minutes; no Transfermarkt requests).
+`uv run main.py collect --current-only --steps understat sofascore_leagues` (about 5 Understat and ~30 Sofascore requests, under 2 minutes; no Transfermarkt requests), followed by `uv run main.py performance` (phase 5, offline, from what is in the cache).
 
 ```bash
 ./scripts/install_weekly.sh                   # systemd user timer: Mondays at 09:00
@@ -123,6 +123,23 @@ A ridge regression on log(fixed fee in 2026 prices), trained on the 1,086 price-
 
 Writes `outputs/model/`: `ranking_2026.csv`/`.json` (fee, fair price, interval, verdict and each feature group's part of the prediction), `model_comparison.csv`, `coefficients.csv`, `cv_by_summer.csv`, five Plotly charts (`.html` + `.json`) and `summary.md`. Predictions for every model purchase go to `data/processed/fair_price.parquet` (out-of-sample for 2019–2025).
 
+## Performance at the new club (phase 5)
+
+```bash
+uv run main.py performance                    # offline: data/processed + the cached 2026/27 tables in data/interim
+```
+
+Follows all 222 summer-2026 purchases, including the 55 left out of the price model, in 2026/27 league matches for the buying club only. The weekly refresh runs it after collecting, so every number moves with the season.
+
+- **Small sample:** the season is a few matchdays old. A player needs `phase5.min_minutes_after` league minutes for the buying club (270), or `phase5.min_share_of_team_minutes` of the team's minutes since he arrived (30%), whichever is higher; the second rule takes over as the season goes on (1,026 minutes at 38 matches). Every chart subtitle states how many matches have been played.
+- **Status of each purchase:** enough minutes, under the minimum, no league minutes yet, or playing for another club since the transfer (bought and loaned back or out).
+- **Before and after:** per 90 metrics at the new club against the season before, each turned into a percentile against the same reference as phase 3, so both seasons are on one scale. The profile score is the mean percentile of the position's profile metrics (the phase 3 radar).
+- **Cost/performance index:** 2026/27 profile score minus the fee's percentile among summer-2026 purchases of the same position. Positive means performing above the price tier. Known fees and the minimum sample only; phase 4's fair price and verdict sit next to it.
+- **Team results with and without the player:** points, goal difference and xG difference per league match since the transfer date, split by whether he played. Very few matches per side: a description, not an effect.
+- **Sources:** Understat match by match (so only matches for the buying club count; players with no Understat link are matched by name in the new squad) and Sofascore season totals per league and team. Players who played for another club in the same league earlier this season have no Sofascore metrics for 2026/27 (the total mixes both clubs). Understat matches do not split out penalties, so xG and goals include them.
+
+Writes `outputs/performance/`: `performance_2026.csv`/`.json` (one row per purchase), `team_results_2026.csv`/`.json`, `metric_changes.csv`, six Plotly charts (`.html` + `.json`) and `summary.md`; and `data/processed/performance.parquet`.
+
 ## Repository structure
 
 ```
@@ -134,6 +151,7 @@ Writes `outputs/model/`: `ranking_2026.csv`/`.json` (fee, fair price, interval, 
 │   ├── build.py         # phase 2: one table per purchase (offline)
 │   ├── eda/             # phase 3: percentiles and exploratory charts
 │   ├── model/           # phase 4: fair-price model and 2026 ranking
+│   ├── performance/     # phase 5: performance at the new club in 2026/27
 │   ├── report/          # Plotly theme and export
 │   └── ingest/          # transfermarkt, tm_dump, understat, sofascore, uefa, clubelo
 ├── scripts/             # weekly refresh and its systemd timer

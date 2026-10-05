@@ -1,4 +1,4 @@
-"""Linha de comandos: ``uv run main.py collect [--steps ...] [--current-only] [--no-refresh]``, ``build``, ``eda`` e ``model``."""
+"""Linha de comandos: ``uv run main.py collect [--steps ...] [--current-only] [--no-refresh]``, ``build``, ``eda``, ``model`` e ``performance``."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("build", help="Fase 2: tabela por compra (offline, só lê data/interim e a cache)")
     sub.add_parser("eda", help="Fase 3: análise exploratória (offline, só lê data/processed)")
     sub.add_parser("model", help="Fase 4: modelo de preço justo e ranking (offline, só lê data/processed)")
+    sub.add_parser("performance", help="Fase 5: desempenho no clube novo em 2026/27 (offline, lê data/processed e data/interim)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -43,3 +44,7 @@ def main(argv: list[str] | None = None) -> None:
         from . import model
 
         model.run(cfg)
+    elif args.command == "performance":
+        from . import performance
+
+        performance.run(cfg)

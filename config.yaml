@@ -64,6 +64,13 @@ price_model:
   # ranking (decisão de 05/10/2026). Os de baixo ficam nos dados para a Fase 5.
   min_minutes_before: 900
 
+# Desempenho no clube novo (Fase 5). Amostra mínima em 2026/27: o maior entre
+# os minutos fixos e uma parte dos minutos de liga da equipa desde a chegada
+# (o segundo sobe com a época; a 38 jornadas pede 1026 minutos).
+phase5:
+  min_minutes_after: 270
+  min_share_of_team_minutes: 0.3
+
 # Ranking UEFA de países (força das ligas de origem), kassiesa.net.
 uefa:
   ranking_url: https://kassiesa.net/uefa/data/method5/crank{year}.html
