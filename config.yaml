@@ -58,6 +58,12 @@ tm_dump:
   base_url: https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data
   last_summer: 2025
 
+# Modelo de preço justo (Fase 4).
+price_model:
+  # Mínimo de minutos de liga na época anterior para entrar no modelo e no
+  # ranking (decisão de 05/10/2026). Os de baixo ficam nos dados para a Fase 5.
+  min_minutes_before: 900
+
 # Ranking UEFA de países (força das ligas de origem), kassiesa.net.
 uefa:
   ranking_url: https://kassiesa.net/uefa/data/method5/crank{year}.html

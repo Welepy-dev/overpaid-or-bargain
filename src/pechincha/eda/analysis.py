@@ -244,7 +244,7 @@ def minutes_charts(df: pd.DataFrame, out: Path) -> dict:
     fig.update_xaxes(title="League minutes in the season before")
     fig.update_yaxes(title="Purchases")
     style(fig, "How much the bought players played the season before",
-          f"Known fee and at least one league minute (n={len(played):,}). The roadmap's 900-minute minimum is not applied yet.")
+          f"Known fee and at least one league minute (n={len(played):,}). Purchases under {REFERENCE_MIN_MINUTES} minutes stay out of the price model.")
     export(fig, out, "04_minutes_before")
     return {"table": table, "under": under, "n_played": len(played)}
 
@@ -517,9 +517,9 @@ def summary_markdown(s: dict) -> str:
         f"- Median fee went from €{f['median_first'][1]:.1f}m ({f['median_first'][0]}) to €{f['median_last'][1]:.1f}m ({f['median_last'][0]}); "
         "`fee_adjusted` puts every summer in 2026 prices.",
         "",
-        "## Minutes the season before (decision needed)",
-        f"The roadmap's 900-minute minimum is **not applied** in `build`: `in_price_model` only drops purchases with zero minutes. "
-        f"{mn['under']} of {mn['n_played']:,} purchases with a known fee and some minutes played under 900.",
+        "## Minutes the season before",
+        f"The price model needs at least {REFERENCE_MIN_MINUTES} league minutes the season before (decision of 5 Oct 2026, `price_model.min_minutes_before`). "
+        f"{mn['under']} of {mn['n_played']:,} purchases with a known fee and some minutes played fall under it; they stay in the data for phase 5.",
         "",
         "| Minimum minutes | Price model | Training 2019–2025 | Ranking 2026 | ATT | MID | DEF |",
         "|---|---|---|---|---|---|---|",
