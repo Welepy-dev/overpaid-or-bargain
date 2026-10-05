@@ -45,6 +45,16 @@ TEMPLATE = go.layout.Template(
 pio.templates["pechincha"] = TEMPLATE
 
 
+# Marcas dos eixos logarítmicos em €m: 1-2-5 por década, com texto completo
+# (as marcas por omissão do Plotly repetem "2" e "5" sem a ordem de grandeza).
+LOG_TICKS = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500]
+
+
+def log_axis(title: str) -> dict:
+    """Eixo logarítmico em €m com marcas 1-2-5 legíveis (para ``update_xaxes``/``update_yaxes``)."""
+    return dict(type="log", title=title, tickvals=LOG_TICKS, ticktext=[f"{v:g}" for v in LOG_TICKS], minor=dict(showgrid=False))
+
+
 def style(fig: go.Figure, title: str, subtitle: str | None = None) -> go.Figure:
     """Aplica o tema, o título e um subtítulo (onde vai a amostra)."""
     text = f"{title}<br><sup style='color:{TEXT_SECONDARY}'>{subtitle}</sup>" if subtitle else title

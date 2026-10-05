@@ -28,7 +28,7 @@ import plotly.graph_objects as go
 
 from ..config import Config
 from ..pipeline import load, save
-from ..report.theme import ACCENT, DIVERGING, MUTED, POSITION_COLORS, POSITION_LABELS, TEXT_SECONDARY, export, style
+from ..report.theme import ACCENT, DIVERGING, MUTED, POSITION_COLORS, POSITION_LABELS, TEXT_SECONDARY, export, log_axis, style
 
 log = logging.getLogger(__name__)
 
@@ -190,7 +190,7 @@ def fee_charts(df: pd.DataFrame, out: Path) -> dict:
     for summer, g in known.groupby("summer"):
         fig.add_trace(go.Box(y=g["fee_m"], name=f"{summer}<br>n={len(g)}", marker=dict(color=ACCENT, size=4), line=dict(width=1.5),
                              boxpoints="outliers", text=g["player_name"], hovertemplate="%{text}: €%{y:.1f}m<extra></extra>", showlegend=False))
-    fig.update_yaxes(type="log", title="Fixed fee (€m, log scale)")
+    fig.update_yaxes(**log_axis("Fixed fee (€m, log scale)"))
     style(fig, "Fees per summer", f"Median fee rose from {_money(by['median_fee_m'].iloc[0] * 1e6)} in {by['summer'].iloc[0]} "
           f"to {_money(by['median_fee_m'].iloc[-1] * 1e6)} in {by['summer'].iloc[-1]}; known fees only.")
     export(fig, out, "02_fee_by_summer")
@@ -268,8 +268,8 @@ def driver_charts(df: pd.DataFrame, out: Path) -> dict:
                                    hovertemplate="%{text}<br>Fee €%{y:.1f}m · market value €%{x:.1f}m<extra></extra>"))
     lo, hi = both[["mv_adjusted", "fee_adjusted"]].min().min() / 1e6, both[["mv_adjusted", "fee_adjusted"]].max().max() / 1e6
     fig.add_trace(go.Scatter(x=[lo, hi], y=[lo, hi], mode="lines", line=dict(color=MUTED, dash="dot", width=1.5), name="Fee = market value", hoverinfo="skip"))
-    fig.update_xaxes(type="log", title="Transfermarkt value before the transfer (€m, 2026 prices)")
-    fig.update_yaxes(type="log", title="Fixed fee (€m, 2026 prices)")
+    fig.update_xaxes(**log_axis("Transfermarkt value before the transfer (€m, 2026 prices)"))
+    fig.update_yaxes(**log_axis("Fixed fee (€m, 2026 prices)"))
     rho = _spearman(both["fee_adjusted"], both["mv_adjusted"])
     premium = (both["fee_adjusted"] / both["mv_adjusted"]).median()
     style(fig, "Fees follow market value closely", f"Price-model purchases with a market value (n={len(both):,}). Spearman ρ = {rho:.2f}; "
@@ -290,7 +290,7 @@ def driver_charts(df: pd.DataFrame, out: Path) -> dict:
     fig.add_trace(go.Scatter(x=ages["age"], y=ages["median"], mode="lines+markers", name="Median by age", line=dict(color="#0b0b0b", width=2),
                              marker=dict(size=8), customdata=ages["size"], hovertemplate="Age %{x}: median €%{y:.1f}m (n=%{customdata})<extra></extra>"))
     fig.update_xaxes(title="Age at transfer (≤18 and ≥33 pooled in the median)")
-    fig.update_yaxes(type="log", title="Fixed fee (€m, 2026 prices)")
+    fig.update_yaxes(**log_axis("Fixed fee (€m, 2026 prices)"))
     peak = ages.loc[ages["median"].idxmax()]
     style(fig, "Fee by age", f"Price-model purchases (n={len(a):,}). The median peaks at {int(peak['age'])} (€{peak['median']:.1f}m, n={int(peak['size'])}).")
     export(fig, out, "06_fee_vs_age")
@@ -304,7 +304,7 @@ def driver_charts(df: pd.DataFrame, out: Path) -> dict:
         g = m[m["origin_league_top5"] == lg]
         fig.add_trace(go.Box(y=g["fee_adjusted_m"], name=f"{LEAGUE_NAMES[lg]}<br>n={len(g)}", marker=dict(color=ACCENT, size=4), line=dict(width=1.5),
                              text=g["player_name"], hovertemplate="%{text}: €%{y:.1f}m<extra></extra>", showlegend=False))
-    fig.update_yaxes(type="log", title="Fixed fee (€m, 2026 prices)")
+    fig.update_yaxes(**log_axis("Fixed fee (€m, 2026 prices)"))
     style(fig, "Fee by origin league", "Price-model purchases, all summers; ordered by median fee.")
     export(fig, out, "07_fee_by_origin_league")
     by_league = m.groupby("origin_league_top5")["fee_adjusted_m"].agg(["size", "median"]).sort_values("median", ascending=False)
@@ -320,7 +320,7 @@ def driver_charts(df: pd.DataFrame, out: Path) -> dict:
         fig.add_trace(go.Box(y=g["fee_adjusted_m"], name=f"{band}<br>n={len(g)}", marker=dict(color=ACCENT, size=4), line=dict(width=1.5),
                              text=g["player_name"] + " (" + g["other_club_name"] + ")", hovertemplate="%{text}: €%{y:.1f}m<extra></extra>", showlegend=False))
     fig.update_xaxes(title="Origin club's league position the season before")
-    fig.update_yaxes(type="log", title="Fixed fee (€m, 2026 prices)")
+    fig.update_yaxes(**log_axis("Fixed fee (€m, 2026 prices)"))
     rho_pos = _spearman(p["fee_adjusted"], p["origin_league_position"])
     style(fig, "Players from stronger clubs cost more", f"Price-model purchases with a known origin position (n={len(p):,}). Spearman ρ = {rho_pos:.2f}.")
     export(fig, out, "08_fee_by_origin_position")
@@ -335,7 +335,7 @@ def driver_charts(df: pd.DataFrame, out: Path) -> dict:
                                  marker=dict(color=POSITION_COLORS[pos], size=9, opacity=0.7, line=dict(width=1, color="white")),
                                  text=g["player_name"] + " (" + g["club_name"] + ")", hovertemplate="%{text}<br>%{x:.1f} years · €%{y:.1f}m<extra></extra>"))
     fig.update_xaxes(title="Length of the new contract (years)")
-    fig.update_yaxes(type="log", title="Fixed fee (€m)")
+    fig.update_yaxes(**log_axis("Fixed fee (€m)"))
     style(fig, "Summer 2026: fee vs. length of the new contract", f"Summer 2026 purchases (n={len(c)}). Transfermarkt only keeps the current contract, "
           "so years left at the selling club are not available.")
     export(fig, out, "09_fee_vs_contract_2026")
@@ -354,6 +354,9 @@ def spend_2026_charts(df: pd.DataFrame, out: Path) -> dict:
                            text=[f"€{v:,.0f}m · {n} buys" for v, n in zip(by_league["total_m"], by_league["n"])], textposition="outside",
                            textfont=dict(color=TEXT_SECONDARY), hovertemplate="%{y}: €%{x:,.0f}m, %{customdata[0]} purchases, median €%{customdata[1]:.1f}m<extra></extra>"))
     fig.update_xaxes(title="Fixed fees spent (€m)")
+    fig.update_yaxes(automargin=True)
+    fig.update_traces(cliponaxis=False)
+    fig.update_layout(margin=dict(r=140))
     total = s["fee_m"].sum()
     share = by_league["total_m"].get("ENG", 0) / total
     style(fig, "Summer 2026 spending by buying league", f"{len(s)} top-5 to top-5 purchases, €{total / 1000:.2f}bn in fixed fees; the Premier League spent {share:.0%}.")
@@ -368,7 +371,9 @@ def spend_2026_charts(df: pd.DataFrame, out: Path) -> dict:
                            customdata=top["n"], hovertemplate="%{y}: €%{x:,.0f}m over %{customdata} purchases<extra></extra>"))
     fig.update_xaxes(title="Fixed fees spent (€m)")
     style(fig, "Summer 2026: the 15 biggest spenders", "Purchases from other top-5 clubs only; label shows total and number of purchases.")
-    fig.update_layout(height=560)
+    fig.update_yaxes(automargin=True)
+    fig.update_traces(cliponaxis=False)
+    fig.update_layout(height=560, margin=dict(r=100))
     export(fig, out, "11_spend_2026_by_club")
 
     cols = ["player_name", "position", "age_at_transfer", "other_club_name", "club_name", "fee_m", "market_value_before", "minutes_before"]
@@ -387,7 +392,9 @@ def spend_2026_charts(df: pd.DataFrame, out: Path) -> dict:
     fig.add_trace(go.Scatter(x=t["fee_m"], y=names, mode="markers", name="Fixed fee", marker=dict(color=ACCENT, size=11, line=dict(width=2, color="white")),
                              customdata=t["other_club_name"], hovertemplate="%{y}<br>Fee €%{x:.1f}m from %{customdata}<extra></extra>"))
     fig.update_xaxes(title="€m")
-    style(fig, "Summer 2026: the 20 most expensive purchases", "Fixed fee against the Transfermarkt value just before the move.")
+    no_mv = t.loc[t["market_value_before"].isna(), "player_name"].iloc[::-1].tolist()
+    note = f" No market value for {', '.join(no_mv)}." if no_mv else ""
+    style(fig, "Summer 2026: the 20 most expensive purchases", f"Fixed fee against the Transfermarkt value just before the move.{note}")
     fig.update_layout(height=640, margin=dict(l=280))
     export(fig, out, "12_top_purchases_2026")
 
@@ -468,11 +475,11 @@ def feature_charts(df: pd.DataFrame, metrics: list[str], out: Path) -> dict:
     corr.round(3).to_csv(out / "feature_correlations.csv", index=False)
 
     top = corr.head(20).iloc[::-1]
-    fig = go.Figure(go.Bar(y=top["label"], x=top["rho"], orientation="h", marker=dict(color=np.where(top["rho"] >= 0, "#2a78d6", "#e34948"), cornerradius=4),
+    fig = go.Figure(go.Bar(y=top["label"], x=top["rho"], orientation="h", marker=dict(color=np.where(top["rho"] >= 0, DIVERGING[-1][1], DIVERGING[0][1]), cornerradius=4),
                            customdata=top["n"], hovertemplate="%{y}: ρ = %{x:.2f} (n=%{customdata})<extra></extra>"))
     fig.update_xaxes(title="Spearman ρ with log(fee, 2026 prices)", range=[-1, 1], zeroline=True, zerolinecolor=MUTED)
     style(fig, "What moves with the fee: the 20 strongest features", f"Price-model purchases with ≥{REFERENCE_MIN_MINUTES} minutes before (n={len(m):,}). "
-          "Blue = higher with higher fees, red = lower.")
+          "Red = higher with higher fees, blue = lower (as in the heatmap).")
     fig.update_layout(height=620, margin=dict(l=240))
     export(fig, out, "14_feature_correlations")
 
