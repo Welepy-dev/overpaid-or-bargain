@@ -3,6 +3,7 @@
 from datetime import date
 
 import pandas as pd
+import pytest
 
 from pechincha.ingest import sofascore as ss
 from pechincha.ingest import tm_dump, uefa
@@ -113,3 +114,19 @@ def test_normalize_name_keeps_nordic_letters():
     assert ss.normalize_name("Joakim Mæhle") == "joakim maehle"
     assert ss.normalize_name("Martin Ødegaard") == "martin odegaard"
     assert ss.normalize_name("Łukasz Piszczek") == "lukasz piszczek"
+
+
+def test_hicp_parse_and_summer_deflator():
+    from pechincha.ingest import hicp
+
+    # Fixture com o formato do CSV do BCE e valores sintéticos (100 em jan/2025, +1 por mês).
+    m = hicp.parse_csv(fixture_text("ecb_hicp.csv"))
+    assert list(m.columns) == hicp.COLUMNS
+    assert len(m) == 21  # a linha sem valor (2026-10) fica de fora
+    assert m.iloc[0].tolist() == ["2025-01", 2025, 1, 100.0]
+
+    d = hicp.summer_deflator(m, [2025, 2026, 2027])
+    # Verão = média de jun-ago: 2025 → 106, 2026 → 118; 2027 ainda sem dados → último mês (120).
+    assert d[2027] == 1.0
+    assert d[2026] == pytest.approx(120 / 118)
+    assert d[2025] == pytest.approx(120 / 106)
