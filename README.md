@@ -70,7 +70,7 @@ uv run main.py collect --steps transfers tm_details   # selected steps
 uv run pytest                             # parser and pipeline tests (offline)
 ```
 
-Steps: `transfers`, `tm_details`, `understat`, `sofascore_leagues`, `uefa` (and the optional `sofascore` and `clubelo`). `sofascore` (season stats for players arriving from outside the top 5) was set aside on 3 Oct 2026: about 1,300 players to look up one by one, hours of requests and a high risk of being blocked.
+Steps: `transfers`, `tm_details`, `understat`, `sofascore_leagues`, `uefa`, `hicp` (euro-area inflation from the ECB, used only by the EDA) (and the optional `sofascore` and `clubelo`). `sofascore` (season stats for players arriving from outside the top 5) was set aside on 3 Oct 2026: about 1,300 players to look up one by one, hours of requests and a high risk of being blocked.
 Settings (leagues, seasons, eligibility rules, request interval) live in `config.yaml`.
 Every downloaded page is cached in `data/raw/`; tables are written to `data/interim/` as parquet.
 A failing step is logged and the next steps still run. Sofascore needs Chromium (set `PECHINCHA_BROWSER` if it is not found).
@@ -135,7 +135,7 @@ Writes `outputs/model/`: `ranking_2026.csv`/`.json` (fee, fair price, interval, 
 │   ├── eda/             # phase 3: percentiles and exploratory charts
 │   ├── model/           # phase 4: fair-price model and 2026 ranking
 │   ├── report/          # Plotly theme and export
-│   └── ingest/          # transfermarkt, tm_dump, understat, sofascore, uefa, clubelo
+│   └── ingest/          # transfermarkt, tm_dump, understat, sofascore, uefa, hicp, clubelo
 ├── scripts/             # weekly refresh and its systemd timer
 ├── tests/               # offline tests with fixtures
 ├── data/                # raw/ cache, interim/ and processed/ tables (not in git); manual/ links (in git)

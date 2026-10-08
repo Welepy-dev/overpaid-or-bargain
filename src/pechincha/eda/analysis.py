@@ -9,6 +9,9 @@ rede. ``uv run main.py eda`` grava:
 - ``outputs/eda/*.csv``: as tabelas por trás dos gráficos.
 - ``outputs/eda/summary.md``: os números principais, sempre com a amostra.
 
+Lê também ``data/interim/hicp_monthly.parquet`` (passo ``hicp`` do ``collect``),
+se existir, para o gasto por verão em euros de 2026 (gráfico 03b).
+
 Percentis: cada compra é comparada com as compras do modelo de preço da mesma
 posição (ATT, MID, DEF), de todos os verões juntos, com pelo menos
 ``REFERENCE_MIN_MINUTES`` minutos de liga na época anterior. Não há posição
@@ -27,6 +30,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from ..config import Config
+from ..ingest.hicp import summer_deflator
 from ..pipeline import load, save
 from ..report.theme import ACCENT, DIVERGING, MUTED, POSITION_COLORS, POSITION_LABELS, TEXT_SECONDARY, export, log_axis, style
 
@@ -96,7 +100,12 @@ def run(cfg: Config) -> dict:
     df = df.merge(pct.drop(columns=["player_name", "position_group", "minutes_before"]), on=KEY, how="left")
 
     summary: dict = {"n": len(df), "n_model": int(df["in_price_model"].sum()), "n_2026": int((df["summer"] == SEASON).sum())}
-    summary["fees"] = fee_charts(df, out)
+    hicp_path = cfg.interim_dir / "hicp_monthly.parquet"
+    hicp = load(hicp_path) if hicp_path.exists() else None
+    if hicp is None:
+        log.warning("Sem %s: corre `collect --steps hicp` para o gráfico 03b (gasto em euros de 2026)", hicp_path)
+    summary["fees"] = fee_charts(df, out, hicp)
+    summary["ages"] = age_charts(df, out)
     summary["minutes"] = minutes_charts(df, out)
     summary["drivers"] = driver_charts(df, out)
     summary["spend_2026"] = spend_2026_charts(df, out)
@@ -169,7 +178,7 @@ def _spearman(a: pd.Series, b: pd.Series) -> float:
     return a[ok].rank().corr(b[ok].rank())
 
 
-def fee_charts(df: pd.DataFrame, out: Path) -> dict:
+def fee_charts(df: pd.DataFrame, out: Path, hicp: pd.DataFrame | None = None) -> dict:
     known = df[df["fee_known"] & (df["fee"] > 0)]
     log_fee = np.log10(known["fee"])
     fig = go.Figure(go.Histogram(x=log_fee, xbins=dict(size=0.1), marker=dict(color=ACCENT, line=dict(width=1, color="white")),
@@ -184,6 +193,9 @@ def fee_charts(df: pd.DataFrame, out: Path) -> dict:
     by = known.groupby("summer").agg(n=("fee", "size"), median_fee_m=("fee_m", "median"), mean_fee_m=("fee_m", "mean"),
                                      p90_fee_m=("fee_m", lambda s: s.quantile(0.9)), total_fee_m=("fee_m", "sum"),
                                      fee_index=("fee_index", "first")).reset_index()
+    if hicp is not None and len(hicp):
+        by["hicp_deflator"] = by["summer"].map(summer_deflator(hicp, by["summer"].tolist()))
+        by["total_fee_real_m"] = by["total_fee_m"] * by["hicp_deflator"]
     by.round(2).to_csv(out / "fees_by_summer.csv", index=False)
 
     fig = go.Figure()
@@ -201,10 +213,52 @@ def fee_charts(df: pd.DataFrame, out: Path) -> dict:
     fig.update_yaxes(title="Total fixed fees (€m)")
     style(fig, "Spending on top-5 to top-5 purchases per summer", "Sum of known fixed fees; loans, free transfers and goalkeepers excluded.")
     export(fig, out, "03_spend_by_summer")
+
+    real = None
+    if "total_fee_real_m" in by and by["total_fee_real_m"].notna().any():
+        real = by.dropna(subset=["total_fee_real_m"])
+        base = int(by["summer"].max())
+        x = real["summer"].astype(str)
+        fig = go.Figure(go.Bar(x=x, y=real["total_fee_real_m"], name=f"In {base} euros", marker=dict(color=ACCENT, cornerradius=4),
+                               customdata=np.c_[real["n"], real["total_fee_m"]],
+                               hovertemplate=f"%{{x}}: €%{{y:,.0f}}m in {base} euros (€%{{customdata[1]:,.0f}}m at the time) "
+                                             "over %{customdata[0]} purchases<extra></extra>",
+                               text=[f"€{v / 1000:.2f}bn" for v in real["total_fee_real_m"]], textposition="outside",
+                               textfont=dict(color=TEXT_SECONDARY)))
+        fig.add_trace(go.Scatter(x=x, y=real["total_fee_m"], name="Nominal (euros of each summer)", mode="markers",
+                                 marker=dict(color=MUTED, size=9, symbol="line-ew", line=dict(width=3, color=MUTED)),
+                                 hovertemplate="%{x}: €%{y:,.0f}m nominal<extra></extra>"))
+        fig.update_yaxes(title=f"Total fixed fees (€m, {base} prices)")
+        fig.update_layout(legend=dict(orientation="h", y=1.02, x=0, yanchor="bottom"))
+        style(fig, f"Spending on top-5 to top-5 purchases per summer, in {base} euros",
+              "Sum of known fixed fees deflated by euro-area HICP (ECB, June–August average of each summer); "
+              "grey marks are the nominal totals. Loans, free transfers and goalkeepers excluded.")
+        export(fig, out, "03b_spend_by_summer_real")
     first, last = by.iloc[0], by.iloc[-1]
     return {"n_known": len(known), "median": known["fee"].median(), "mean": known["fee"].mean(), "skew_log": float(log_fee.skew()),
             "skew": float(known["fee"].skew()), "median_first": (int(first["summer"]), first["median_fee_m"]),
-            "median_last": (int(last["summer"]), last["median_fee_m"]), "total_last": last["total_fee_m"], "by_summer": by}
+            "median_last": (int(last["summer"]), last["median_fee_m"]), "total_last": last["total_fee_m"], "by_summer": by,
+            "real": real}
+
+
+def age_charts(df: pd.DataFrame, out: Path) -> dict:
+    """Idade dos jogadores comprados em cada verão (todas as compras, com ou sem valor conhecido)."""
+    a = df.dropna(subset=["age_at_transfer"])
+    by = a.groupby("summer")["age_at_transfer"].agg(n="size", median_age="median", mean_age="mean",
+                                                      under_23=lambda s: (s < 23).mean(), over_28=lambda s: (s >= 28).mean()).reset_index()
+    by.round(3).to_csv(out / "ages_by_summer.csv", index=False)
+
+    fig = go.Figure()
+    for summer, g in a.groupby("summer"):
+        fig.add_trace(go.Box(y=g["age_at_transfer"], name=f"{summer}<br>n={len(g)}", marker=dict(color=ACCENT, size=4), line=dict(width=1.5),
+                             boxpoints="outliers", text=g["player_name"], hovertemplate="%{text}: %{y:.1f} years<extra></extra>", showlegend=False))
+    fig.update_yaxes(title="Age at transfer (years)")
+    first, last = by.iloc[0], by.iloc[-1]
+    style(fig, "Age of top-5 to top-5 purchases per summer",
+          f"All purchases (n={len(a):,}), goalkeepers and loans excluded. Median age {first['median_age']:.1f} in {int(first['summer'])} "
+          f"and {last['median_age']:.1f} in {int(last['summer'])}; {last['under_23']:.0%} under 23 in {int(last['summer'])}.")
+    export(fig, out, "06b_age_by_summer")
+    return {"n": len(a), "median": float(a["age_at_transfer"].median()), "by_summer": by}
 
 
 def _money(v: float) -> str:
@@ -516,6 +570,20 @@ def summary_markdown(s: dict) -> str:
         f"{f['skew_log']:.2f} in log10, so the model works on log(fee).",
         f"- Median fee went from €{f['median_first'][1]:.1f}m ({f['median_first'][0]}) to €{f['median_last'][1]:.1f}m ({f['median_last'][0]}); "
         "`fee_adjusted` puts every summer in 2026 prices.",
+    ]
+    if f["real"] is not None:
+        r = f["real"]
+        peak = r.loc[r["total_fee_real_m"].idxmax()]
+        lines.append(f"- Total spending in {int(r['summer'].max())} euros (euro-area HICP, chart 03b): "
+                     + ", ".join(f"{int(x.summer)} €{x.total_fee_real_m / 1000:.2f}bn" for x in r.itertuples())
+                     + f". Peak: {int(peak['summer'])}.")
+    else:
+        lines.append("- No HICP file yet (`uv run main.py collect --steps hicp`), so chart 03b was skipped.")
+    lines += [
+        "",
+        "## Ages (chart 06b)",
+        f"- Median age at transfer {s['ages']['median']:.1f} (n={s['ages']['n']:,}). By summer (median, share under 23): "
+        + ", ".join(f"{int(r.summer)} {r.median_age:.1f} ({r.under_23:.0%})" for r in s["ages"]["by_summer"].itertuples()) + ".",
         "",
         "## Minutes the season before",
         f"The price model needs at least {REFERENCE_MIN_MINUTES} league minutes the season before (decision of 5 Oct 2026, `price_model.min_minutes_before`). "

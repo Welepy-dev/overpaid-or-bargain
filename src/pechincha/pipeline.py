@@ -11,6 +11,7 @@ Passos (cada um grava em ``data/interim/`` e pode correr sozinho):
 - ``sofascore_leagues``  Sofascore: métricas defensivas e de posse de todos os
                   jogadores de campo das 5 ligas, por época (substitui o FBref).
 - ``uefa``        Coeficientes UEFA por país (força das ligas de origem).
+- ``hicp``        IPCH mensal da zona euro (BCE), para o gasto em euros de 2026 na EDA.
 - ``sofascore``   Jogadores que chegam de fora das 5 ligas (só jogos de liga).
 
 Os jogadores que os dois passos do Sofascore não ligam ficam em
@@ -34,12 +35,12 @@ import pandas as pd
 
 from .config import Config
 from .http import FetchError
-from .ingest import clubelo, sofascore, tm_dump, transfermarkt, uefa, understat
+from .ingest import clubelo, hicp, sofascore, tm_dump, transfermarkt, uefa, understat
 from .progress import progress
 
 log = logging.getLogger(__name__)
 
-STEPS = ["transfers", "tm_details", "understat", "sofascore_leagues", "uefa"]
+STEPS = ["transfers", "tm_details", "understat", "sofascore_leagues", "uefa", "hicp"]
 OPTIONAL_STEPS = ["sofascore", "clubelo"]
 
 GOALKEEPER = {"goalkeeper", "gk", "guarda-redes"}
@@ -250,6 +251,10 @@ def _step_uefa(cfg: Config, years: list[int]) -> None:
     _merge_save(uefa.five_year_ranking(coefs, years), out / "uefa_country_ranking.parquet", "summer", years)
 
 
+def _step_hicp(cfg: Config, years: list[int]) -> None:
+    save(hicp.fetch_monthly(cfg), cfg.interim_dir / "hicp_monthly.parquet")
+
+
 def _step_clubelo(cfg: Config, years: list[int]) -> None:
     _merge_save(clubelo.fetch_ratings(cfg, years), cfg.interim_dir / "clubelo_summers.parquet", "summer", years)
 
@@ -320,6 +325,7 @@ _STEP_FUNCS = {
     "understat": _step_understat,
     "sofascore_leagues": _step_sofascore_leagues,
     "uefa": _step_uefa,
+    "hicp": _step_hicp,
     "clubelo": _step_clubelo,
     "sofascore": _step_sofascore,
 }
