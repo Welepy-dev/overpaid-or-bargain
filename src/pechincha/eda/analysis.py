@@ -452,13 +452,46 @@ def spend_2026_charts(df: pd.DataFrame, out: Path) -> dict:
     fig.update_layout(height=640, margin=dict(l=280))
     export(fig, out, "12_top_purchases_2026")
 
+    bargains = _bargains_2026_chart(s, cols, out)
+
     cheapest = s[s["fee"] > 0].sort_values("fee").iloc[0]
     priciest = ranked.iloc[0]
     mv = s.dropna(subset=["market_value_before"])
     return {"n": len(s), "total_m": total, "by_league": by_league, "top_clubs": by_club.head(5),
             "priciest": (priciest["player_name"], priciest["club_name"], priciest["fee_m"]),
             "cheapest": (cheapest["player_name"], cheapest["club_name"], cheapest["fee_m"]),
-            "above_mv": int((mv["fee"] > mv["market_value_before"]).sum()), "n_mv": len(mv), "missing_mv": int(s["market_value_before"].isna().sum())}
+            "above_mv": int((mv["fee"] > mv["market_value_before"]).sum()), "n_mv": len(mv), "missing_mv": int(s["market_value_before"].isna().sum()),
+            "bargains": bargains}
+
+
+def _bargains_2026_chart(s: pd.DataFrame, cols: list[str], out: Path, n: int = 20) -> pd.DataFrame:
+    """As compras de 2026 com o maior desconto (em euros) face ao valor de mercado antes da transferência."""
+    b = s[(s["fee"] > 0) & (s["fee"] < s["market_value_before"])].copy()
+    b["market_value_before_m"] = b["market_value_before"] / 1e6
+    b["discount_m"] = b["market_value_before_m"] - b["fee_m"]
+    b["fee_to_mv"] = b["fee"] / b["market_value_before"]
+    b = b.sort_values("discount_m", ascending=False)
+    b[[c for c in cols if c != "market_value_before"] + ["market_value_before_m", "discount_m", "fee_to_mv"]].round(2) \
+        .to_csv(out / "bargains_2026.csv", index=False)
+    t = b.head(n).iloc[::-1]
+    names = t["player_name"] + " (" + t["club_name"] + ")"
+    fig = go.Figure()
+    for name, r in zip(names, t.itertuples()):
+        fig.add_trace(go.Scatter(x=[r.fee_m, r.market_value_before_m], y=[name] * 2, mode="lines",
+                                 line=dict(color="#c9c8c3", width=2), showlegend=False, hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=t["market_value_before_m"], y=names, mode="markers", name="Market value before", marker=dict(color=MUTED, size=10),
+                             hovertemplate="%{y}<br>Market value €%{x:.0f}m<extra></extra>"))
+    fig.add_trace(go.Scatter(x=t["fee_m"], y=names, mode="markers", name="Fixed fee", marker=dict(color=ACCENT, size=11, line=dict(width=2, color="white")),
+                             customdata=np.c_[t["other_club_name"], t["discount_m"], t["fee_to_mv"] * 100],
+                             hovertemplate="%{y}<br>Fee €%{x:.1f}m from %{customdata[0]}<br>€%{customdata[1]:.1f}m below market value "
+                                           "(%{customdata[2]:.0f}% of it)<extra></extra>"))
+    fig.update_xaxes(title="€m")
+    style(fig, f"Summer 2026: the {len(t)} biggest bargains",
+          f"Purchases with the largest gap between the Transfermarkt value just before the move and the fixed fee paid. "
+          f"{len(b)} of {int(s['market_value_before'].notna().sum())} purchases with a market value cost less than it.")
+    fig.update_layout(height=640, margin=dict(l=280))
+    export(fig, out, "12b_top_bargains_2026")
+    return b
 
 
 # --------------------------------------------------------------------------- perfis
@@ -613,6 +646,9 @@ def summary_markdown(s: dict) -> str:
         "- Biggest spenders: " + ", ".join(f"{r.club_name} €{r.total_m:,.0f}m ({r.n})" for r in sp["top_clubs"].itertuples()) + ".",
         f"- Most expensive: {sp['priciest'][0]} to {sp['priciest'][1]}, €{sp['priciest'][2]:.1f}m. Cheapest paid fee: {sp['cheapest'][0]} to {sp['cheapest'][1]}, €{sp['cheapest'][2]:.2f}m.",
         f"- {sp['above_mv']} of {sp['n_mv']} purchases with a market value cost more than it ({sp['missing_mv']} have no market value).",
+        "- Biggest bargains (fee furthest below market value, chart 12b): "
+        + (", ".join(f"{r.player_name} to {r.club_name} €{r.fee_m:.1f}m for €{r.market_value_before_m:.0f}m" for r in sp["bargains"].head(5).itertuples())
+           or "none") + ".",
         "",
         "## Percentiles and profiles",
         "Each purchase is ranked against bought players of the same position (ATT/MID/DEF), all summers pooled, with at least "
