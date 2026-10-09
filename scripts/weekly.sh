@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Execução semanal: só as estatísticas da época 2026/27 (Understat e Sofascore por liga).
+# Execução semanal: só as estatísticas da época 2026/27 (Understat e Sofascore por liga),
+# e depois a Fase 5 (desempenho no clube novo), offline, com o que ficou em cache.
 # Transferências e detalhes do Transfermarkt ficam de fora: a janela fechou e
 # repeti-los seriam ~450 pedidos ao Transfermarkt, com risco de bloqueio.
 set -euo pipefail
@@ -11,6 +12,8 @@ marker=$(mktemp)
 trap 'rm -f "$marker"' EXIT
 status=0
 uv run main.py collect --current-only --steps understat sofascore_leagues >>"$log" 2>&1 || status=$?
+# Mesmo que um passo da recolha falhe, a Fase 5 corre com o que está em cache.
+uv run main.py performance >>"$log" 2>&1 || status=$?
 # Pedidos feitos = páginas novas ou renovadas na cache.
 {
   echo "---"

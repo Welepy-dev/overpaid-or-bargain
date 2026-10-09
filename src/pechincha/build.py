@@ -52,6 +52,7 @@ CLUB_ALIASES = {
 # Equipas do Sofascore -> Understat, quando as palavras não chegam ("M'gladbach" ia para o Dortmund).
 SOFASCORE_TEAM_ALIASES = {
     "1. FC Köln": "FC Cologne",
+    "Brighton & Hove Albion": "Brighton",
     "1. FC Nürnberg": "Nuernberg",
     "Borussia M'gladbach": "Borussia M.Gladbach",
     "Olympique Lyonnais": "Lyon",

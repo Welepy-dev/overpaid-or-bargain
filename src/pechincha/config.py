@@ -32,6 +32,7 @@ class Config:
     tm_dump: dict = field(default_factory=dict)
     uefa: dict = field(default_factory=dict)
     price_model: dict = field(default_factory=dict)
+    phase5: dict = field(default_factory=dict)
     hicp: dict = field(default_factory=dict)
     root: Path = ROOT
 
@@ -72,6 +73,7 @@ def load_config(path: Path | None = None) -> Config:
         tm_dump=raw.get("tm_dump", {}),
         uefa=raw.get("uefa", {}),
         price_model=raw.get("price_model", {}),
+        phase5=raw.get("phase5", {}),
         hicp=raw.get("hicp", {}),
         root=path.parent,
     )
