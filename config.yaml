@@ -70,6 +70,9 @@ price_model:
 phase5:
   min_minutes_after: 270
   min_share_of_team_minutes: 0.3
+  # Shrinkage: as métricas por 90 de 2026/27 são puxadas para as da época
+  # anterior com o peso de k minutos (com k minutos agora, contam metade cada).
+  shrinkage_minutes: 900
 
 # Ranking UEFA de países (força das ligas de origem), kassiesa.net.
 uefa:

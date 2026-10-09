@@ -89,12 +89,34 @@ def test_team_games_two_sides_and_points():
 def test_cost_performance_index_and_fee_percentile():
     df = pd.DataFrame({"position_group": ["ATT"] * 4 + ["DEF"], "fee_known": [True, True, True, False, True], "fee": [1e6, 2e6, 3e6, np.nan, 5e6],
                        "score_after": [80.0, 50.0, 20.0, 60.0, 40.0], "qualified": [True, True, True, True, False]})
-    out = perf.cost_performance(df)
+    out = perf.cost_performance(df, score="score_after")
     assert out["fee_pct_position"].tolist()[:3] == pytest.approx([16.7, 50.0, 83.3])
     assert out["value_index"].tolist()[:3] == pytest.approx([63.3, 0.0, -63.3])
     # Preço desconhecido ou sem a amostra mínima: sem índice.
     assert out["value_index"].iloc[3:].isna().all()
     assert out["fee_per_score_point"].iloc[0] == pytest.approx(12_000, abs=1_000)
+    assert out["value_index_raw"].tolist()[:3] == pytest.approx([63.3, 0.0, -63.3])
+
+
+def test_shrink_pulls_toward_last_season():
+    after = pd.Series([1.0, 1.0, 1.0, np.nan])
+    before = pd.Series([0.0, 0.0, np.nan, 0.5])
+    minutes = pd.Series([900.0, 2700.0, 300.0, 0.0])
+    out = perf.shrink(after, before, minutes, k=900)
+    # 900 min agora com k=900: metade cada; 2700: 3/4 agora; sem época anterior: fica o de agora; sem minutos: vazio.
+    assert out.iloc[0] == pytest.approx(0.5) and out.iloc[1] == pytest.approx(0.75) and out.iloc[2] == 1.0 and np.isnan(out.iloc[3])
+
+
+def test_confidence_labels():
+    out = perf.confidence(pd.Series([0.0, 45.0, 900.0, 901.0, 1800.0, 2000.0]))
+    assert pd.isna(out.iloc[0]) and out.iloc[1:].tolist() == ["low", "low", "medium", "medium", "high"]
+
+
+def test_bootstrap_difference():
+    rng = np.random.default_rng(0)
+    lo, hi = perf.bootstrap_difference(np.array([3.0, 3.0, 0.0, 1.0]), np.array([0.0, 1.0, 0.0]), rng)
+    assert lo < 7 / 4 - 1 / 3 < hi
+    assert np.isnan(perf.bootstrap_difference(np.array([3.0]), np.array([0.0, 1.0]), rng)[0])
 
 
 def test_same_name_handles_extra_names():
@@ -150,3 +172,15 @@ def test_run_statuses_team_results_and_outputs(cfg):
     table = pd.read_csv(out / "performance_2026.csv")
     assert table["status"].iloc[0] == "qualified" and {"us_xg_p90_before", "us_xg_p90_after", "pct_us_xg_p90_after"} <= set(table.columns)
     assert summary["season"].set_index("lg").loc["ENG", "max_team_matches"] == 4
+
+    # Shrinkage, confiança e intervalo: 270 minutos agora pesam 270/(270+900) no valor com shrinkage.
+    assert r[0]["confidence"] == "low" and pd.notna(r[0]["score_shrunk"]) and pd.notna(r[0]["value_index_raw"])
+    assert np.isnan(r[0]["ppg_difference_low"])  # só 1 jogo sem ele: sem intervalo
+    assert {"score_shrunk", "confidence", "pct_us_xg_p90_shrunk", "ppg_difference_low"} <= set(table.columns)
+
+    # Fotografia com a data do último resultado; correr outra vez substitui-a em vez de a repetir.
+    hist = pd.read_csv(out / "history.csv")
+    assert hist["snapshot_date"].unique().tolist() == ["2026-09-12"] and len(hist) == 24
+    assert (out / "history" / "performance_2026-09-12.csv").exists()
+    perf.run(cfg)
+    assert len(pd.read_csv(out / "history.csv")) == 24
