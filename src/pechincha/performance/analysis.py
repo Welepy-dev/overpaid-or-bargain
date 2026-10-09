@@ -27,6 +27,21 @@ sobe com a época, por isso o critério acompanha a atualização semanal.
 Percentis: contra a mesma referência da Fase 3 (compras do modelo de preço da
 mesma posição, todos os verões, com pelo menos 900 minutos na época anterior),
 para o antes e o depois estarem na mesma escala.
+
+Amostra pequena, tratada de três formas:
+
+- Shrinkage: cada métrica por 90 de 2026/27 é puxada para a da época anterior,
+  ``(min × agora + k × antes) / (min + k)`` com ``k = phase5.shrinkage_minutes``.
+  Com poucos minutos pesa mais a época anterior; ao longo da época pesa mais a
+  atual. O índice custo/desempenho usa a pontuação com shrinkage.
+- Etiqueta de confiança pelos minutos no clube novo: baixa (< 900), média
+  (900–1800), alta (> 1800).
+- Intervalo de 80% por bootstrap sobre os jogos para a diferença de pontos e de
+  xG por jogo com e sem o jogador.
+
+Cada execução guarda também uma fotografia com a data do último resultado em
+``outputs/performance/history/`` e acrescenta-a a ``history.csv``, para mostrar a
+evolução ao longo da época.
 """
 
 from __future__ import annotations
@@ -51,6 +66,11 @@ log = logging.getLogger(__name__)
 SEASON = 2026
 DEFAULT_MIN_MINUTES = 270
 DEFAULT_MIN_SHARE = 0.3
+DEFAULT_SHRINKAGE_MINUTES = 900
+CONFIDENCE_BINS = [(1800, "high"), (900, "medium"), (0, "low")]  # minutos no clube novo (acima de)
+BOOTSTRAP_SAMPLES = 2000
+HISTORY_COLUMNS = ["snapshot_date", "summer", "player_id", "club_id", "player_name", "buying_club", "position_group", "status", "confidence",
+                   "minutes_after", "score_after", "score_shrunk", "value_index", "ppg_difference"]
 
 # Métricas do Understat que os jogos dão um a um. Os jogos não separam os
 # penáltis, por isso compara-se xG e golos (com penáltis), não as versões NP.
@@ -82,7 +102,8 @@ def run(cfg: Config) -> dict:
     sofa = load(inter / "sofascore_league_player_seasons.parquet")
     fair_path = processed / "fair_price.parquet"
     fair = load(fair_path) if fair_path.exists() else None
-    rules = {"min_minutes_after": DEFAULT_MIN_MINUTES, "min_share_of_team_minutes": DEFAULT_MIN_SHARE, **cfg.phase5}
+    rules = {"min_minutes_after": DEFAULT_MIN_MINUTES, "min_share_of_team_minutes": DEFAULT_MIN_SHARE,
+             "shrinkage_minutes": DEFAULT_SHRINKAGE_MINUTES, **cfg.phase5}
 
     games = team_games(schedule)
     df = performance_table(purchases, clubs, matches, games, sofa, fair, rules)
@@ -100,8 +121,10 @@ def run(cfg: Config) -> dict:
     (out / "team_results_2026.json").write_text(team_out.round(3).to_json(orient="records", force_ascii=False, indent=1), encoding="utf-8")
     changes = metric_changes(df)
     changes.to_csv(out / "metric_changes.csv", index=False)
+    season = season_progress(games)
+    snapshot = save_snapshot(table, out, season["last_result"].max())
 
-    summary = {"rules": rules, "season": season_progress(games), "df": df, "table": table, "team": team, "changes": changes}
+    summary = {"rules": rules, "season": season, "df": df, "table": table, "team": team, "changes": changes, "snapshot": snapshot}
     charts(df, team, changes, summary, out)
     (out / "summary.md").write_text(summary_markdown(summary), encoding="utf-8")
     counts = df["status"].value_counts().to_dict()
@@ -241,8 +264,9 @@ def performance_table(purchases: pd.DataFrame, clubs: pd.DataFrame, matches: pd.
         [df["minutes_after"] >= df["min_minutes_required"], df["minutes_after"] > 0, df["club_elsewhere"].notna()],
         ["qualified", "under_min_minutes", "playing_elsewhere"], "no_minutes")
     df["qualified"] = df["status"] == "qualified"
+    df["confidence"] = confidence(df["minutes_after"])
 
-    df = df.join(scores(purchases, df))
+    df = df.join(scores(purchases, df, rules["shrinkage_minutes"]))
     df = df.join(cost_performance(df))
     if fair is not None:
         f = fair[fair["summer"] == SEASON][KEY + ["fair_price", "fair_low", "fair_high", "fee_vs_fair", "verdict"]]
@@ -286,17 +310,38 @@ def percentile_of(values: pd.Series, groups: pd.Series, ref: pd.DataFrame, metri
     return out.round(1)
 
 
-def scores(purchases: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
-    """Percentis antes e depois de cada métrica, a pontuação do perfil da posição e a variação."""
+def confidence(minutes: pd.Series) -> pd.Series:
+    """Etiqueta de confiança pelos minutos no clube novo: low, medium, high (vazio sem minutos)."""
+    out = pd.Series(None, index=minutes.index, dtype=object)
+    for limit, label in CONFIDENCE_BINS[::-1]:
+        out[minutes > limit] = label
+    return out
+
+
+def shrink(after: pd.Series, before: pd.Series, minutes: pd.Series, k: float) -> pd.Series:
+    """Puxa a métrica de 2026/27 para a da época anterior: ``(min × agora + k × antes) / (min + k)``.
+
+    Sem valor da época anterior fica o de agora; sem minutos agora fica vazio.
+    """
+    w = minutes / (minutes + k)
+    return (w * after + (1 - w) * before).where(before.notna(), after).where(after.notna())
+
+
+def scores(purchases: pd.DataFrame, df: pd.DataFrame, shrinkage_minutes: float = DEFAULT_SHRINKAGE_MINUTES) -> pd.DataFrame:
+    """Percentis antes, depois e depois com shrinkage de cada métrica, a pontuação do perfil da posição e a variação."""
     ref = reference(purchases)
     before_ok = df["minutes_before"].fillna(0) > 0
     after_ok = df["minutes_after"] > 0
     out = {}
     for metric in COMPARE_METRICS:
-        out[f"pct_{metric}_before"] = percentile_of(df[metric].where(before_ok), df["position_group"], ref, metric)
-        out[f"pct_{metric}_after"] = percentile_of(df[f"{metric}_after"].where(after_ok), df["position_group"], ref, metric)
+        before = df[metric].where(before_ok)
+        after = df[f"{metric}_after"].where(after_ok)
+        out[f"pct_{metric}_before"] = percentile_of(before, df["position_group"], ref, metric)
+        out[f"pct_{metric}_after"] = percentile_of(after, df["position_group"], ref, metric)
+        shrunk = shrink(after, before, df["minutes_after"], shrinkage_minutes)
+        out[f"pct_{metric}_shrunk"] = percentile_of(shrunk, df["position_group"], ref, metric)
     out = pd.DataFrame(out, index=df.index)
-    for when in ["before", "after"]:
+    for when in ["before", "after", "shrunk"]:
         score = pd.Series(np.nan, index=df.index)
         for pos, metrics in SCORE_METRICS.items():
             rows = df["position_group"] == pos
@@ -308,27 +353,50 @@ def scores(purchases: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def cost_performance(df: pd.DataFrame) -> pd.DataFrame:
+def cost_performance(df: pd.DataFrame, score: str = "score_shrunk") -> pd.DataFrame:
     """Índice custo/desempenho: percentil de desempenho em 2026/27 menos o percentil do preço na posição.
 
     O percentil do preço é contra as compras de 2026 da mesma posição com preço
     conhecido. Positivo: rende acima do que custou, comparado com os outros
     comprados para a mesma posição; negativo: abaixo. Só com a amostra mínima.
+    O desempenho é a pontuação com shrinkage (``score``); ``value_index_raw`` usa
+    a de 2026/27 sem ela.
     """
     known = df["fee_known"].astype(bool) & (df["fee"] > 0)
     fee_pct = pd.Series(np.nan, index=df.index)
     for pos, g in df[known].groupby("position_group"):
         fee_pct.loc[g.index] = (g["fee"].rank(method="average") - 0.5) / len(g) * 100
-    index = (df["score_after"] - fee_pct).where(df["qualified"] & known)
-    per_point = (df["fee"] / df["score_after"].where(df["score_after"] > 0)).where(df["qualified"] & known)
-    return pd.DataFrame({"fee_pct_position": fee_pct.round(1), "value_index": index.round(1), "fee_per_score_point": per_point.round(-3)})
+    ok = df["qualified"] & known
+    index = (df[score] - fee_pct).where(ok)
+    raw = (df["score_after"] - fee_pct).where(ok)
+    per_point = (df["fee"] / df[score].where(df[score] > 0)).where(ok)
+    return pd.DataFrame({"fee_pct_position": fee_pct.round(1), "value_index": index.round(1), "value_index_raw": raw.round(1),
+                         "fee_per_score_point": per_point.round(-3)})
 
 
 # --------------------------------------------------------------------------- resultados da equipa
 
 
-def team_results(df: pd.DataFrame, matches: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
-    """Pontos, golos e xG por jogo da equipa nova desde a chegada, nos jogos em que o jogador jogou e nos outros."""
+def bootstrap_difference(with_: np.ndarray, without: np.ndarray, rng: np.random.Generator,
+                         samples: int = BOOTSTRAP_SAMPLES, level: float = 0.8) -> tuple[float, float]:
+    """Intervalo (``level``) da diferença de médias com e sem o jogador, reamostrando os jogos de cada lado.
+
+    Precisa de pelo menos 2 jogos de cada lado; senão devolve (nan, nan).
+    """
+    if len(with_) < 2 or len(without) < 2:
+        return np.nan, np.nan
+    a = rng.choice(with_, size=(samples, len(with_))).mean(axis=1)
+    b = rng.choice(without, size=(samples, len(without))).mean(axis=1)
+    lo, hi = np.quantile(a - b, [(1 - level) / 2, (1 + level) / 2])
+    return float(lo), float(hi)
+
+
+def team_results(df: pd.DataFrame, matches: pd.DataFrame, games: pd.DataFrame, seed: int = 0) -> pd.DataFrame:
+    """Pontos, golos e xG por jogo da equipa nova desde a chegada, nos jogos em que o jogador jogou e nos outros.
+
+    As diferenças trazem um intervalo de 80% por bootstrap sobre os jogos (semente fixa, para ser reprodutível).
+    """
+    rng = np.random.default_rng(seed)
     m = matches[matches["minutes"] > 0]
     played = set(zip(m["player_id"].astype(int), m["team"], m["game_id"].astype(int)))
     rows = []
@@ -347,6 +415,10 @@ def team_results(df: pd.DataFrame, matches: pd.DataFrame, games: pd.DataFrame) -
             row[f"xgd_per_match_{name}"] = (g["xg_for"] - g["xg_against"]).mean() if n else np.nan
         row["ppg_difference"] = row["ppg_with"] - row["ppg_without"]
         row["xgd_difference"] = row["xgd_per_match_with"] - row["xgd_per_match_without"]
+        w, wo = tg[with_], tg[~with_]
+        row["ppg_difference_low"], row["ppg_difference_high"] = bootstrap_difference(w["points"].to_numpy(float), wo["points"].to_numpy(float), rng)
+        row["xgd_difference_low"], row["xgd_difference_high"] = bootstrap_difference(
+            (w["xg_for"] - w["xg_against"]).to_numpy(float), (wo["xg_for"] - wo["xg_against"]).to_numpy(float), rng)
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -374,19 +446,40 @@ def output_table(df: pd.DataFrame) -> pd.DataFrame:
     t = df.sort_values(["qualified", "value_index", "minutes_after"], ascending=[False, False, False]).copy()
     t["buying_league"] = t["league"].map(LEAGUE_NAMES)
     base = ["player_name", "club_name", "buying_league", "other_club_name", "position_group", "position", "age_at_transfer", "fee", "fee_known",
-            "fair_price", "fee_vs_fair", "verdict", "status", "minutes_after", "min_minutes_required", "appearances_after", "starts_after",
-            "team_matches_since_arrival", "minutes_before", "club_elsewhere", "ss_mixed_clubs", "score_before", "score_after", "score_change",
-            "fee_pct_position", "value_index", "fee_per_score_point", "matches_with", "matches_without", "ppg_with", "ppg_without", "ppg_difference",
-            "xgd_per_match_with", "xgd_per_match_without", "model_exclusion", "summer", "player_id", "club_id"]
+            "fair_price", "fee_vs_fair", "verdict", "status", "confidence", "minutes_after", "min_minutes_required", "appearances_after", "starts_after",
+            "team_matches_since_arrival", "minutes_before", "club_elsewhere", "ss_mixed_clubs", "score_before", "score_after", "score_shrunk", "score_change",
+            "fee_pct_position", "value_index", "value_index_raw", "fee_per_score_point", "matches_with", "matches_without", "ppg_with", "ppg_without",
+            "ppg_difference", "ppg_difference_low", "ppg_difference_high", "xgd_per_match_with", "xgd_per_match_without", "xgd_difference",
+            "xgd_difference_low", "xgd_difference_high", "model_exclusion", "summer", "player_id", "club_id"]
     pairs = []
     for metric in COMPARE_METRICS:
-        pairs += [metric, f"{metric}_after", f"pct_{metric}_before", f"pct_{metric}_after"]
+        pairs += [metric, f"{metric}_after", f"pct_{metric}_before", f"pct_{metric}_after", f"pct_{metric}_shrunk"]
     t = t[base + pairs].rename(columns={"club_name": "buying_club", "other_club_name": "origin_club", "age_at_transfer": "age",
                                          **{m: f"{m}_before" for m in COMPARE_METRICS}})
     num = t.select_dtypes("number").columns.difference(["fee", "fair_price", "fee_per_score_point", "summer", "player_id", "club_id"])
     t[num] = t[num].astype(float).round(3)
     t["fair_price"] = t["fair_price"].round(-4)
     return t.reset_index(drop=True)
+
+
+def save_snapshot(table: pd.DataFrame, out: Path, snapshot_date) -> pd.DataFrame:
+    """Guarda a tabela com a data do último resultado e atualiza ``history.csv`` (uma linha por compra e data).
+
+    A data é a dos dados, não a da execução: correr duas vezes na mesma semana
+    substitui a fotografia dessa data em vez de a repetir.
+    """
+    date = str(snapshot_date)
+    hist_dir = out / "history"
+    hist_dir.mkdir(parents=True, exist_ok=True)
+    table.to_csv(hist_dir / f"performance_{date}.csv", index=False)
+    snap = table[HISTORY_COLUMNS[1:]].assign(snapshot_date=date)[HISTORY_COLUMNS]
+    path = out / "history.csv"
+    if path.exists():
+        old = pd.read_csv(path)
+        snap = pd.concat([old[old["snapshot_date"].astype(str) != date], snap], ignore_index=True)
+    snap = snap.sort_values(["snapshot_date", "player_id"]).reset_index(drop=True)
+    snap.to_csv(path, index=False)
+    return snap
 
 
 # --------------------------------------------------------------------------- gráficos
@@ -441,15 +534,16 @@ def charts(df: pd.DataFrame, team: pd.DataFrame, changes: pd.DataFrame, s: dict,
     for pos in POSITIONS:
         g = v[v["position_group"] == pos]
         fig.add_trace(go.Scatter(
-            x=g["fee_pct_position"], y=g["score_after"], mode="markers", name=f"{POSITION_LABELS[pos]} ({len(g)})",
+            x=g["fee_pct_position"], y=g["score_shrunk"], mode="markers", name=f"{POSITION_LABELS[pos]} ({len(g)})",
             marker=dict(color=POSITION_COLORS[pos], size=9, opacity=0.8, line=dict(width=1.5, color="white")), text=g["player_name"],
             customdata=np.c_[g["club_name"], g["fee"] / 1e6, g["value_index"], g["verdict"].fillna("not in the price model")],
             hovertemplate="<b>%{text}</b> (%{customdata[0]})<br>€%{customdata[1]:.1f}m: fee percentile %{x:.0f} · performance %{y:.0f}"
                           "<br>Index %{customdata[2]:+.0f} · phase 4: %{customdata[3]}<extra></extra>"))
     fig.add_trace(go.Scatter(x=[0, 100], y=[0, 100], mode="lines", line=dict(color=MUTED, dash="dot", width=1.5), name="Performing at price", hoverinfo="skip"))
     fig.update_xaxes(title="Fee percentile among summer-2026 purchases of the same position", range=[0, 100])
-    fig.update_yaxes(title="Performance score in 2026/27 (mean percentile)", range=[0, 100])
-    style(fig, "Cost against performance so far", f"n={len(v)} with a known fee and enough minutes. Above the line: performing above the price tier. {note}")
+    fig.update_yaxes(title="Performance score in 2026/27, shrunk toward last season (mean percentile)", range=[0, 100])
+    style(fig, "Cost against performance so far", f"n={len(v)} with a known fee and enough minutes. Above the line: performing above the price tier. "
+          f"Per 90 stats are pulled toward last season with k={s['rules']['shrinkage_minutes']} minutes. {note}")
     export(fig, out, "03_cost_vs_performance")
 
     # 4. Ranking do índice.
@@ -457,15 +551,16 @@ def charts(df: pd.DataFrame, team: pd.DataFrame, changes: pd.DataFrame, s: dict,
     fig = go.Figure(go.Bar(
         x=top["value_index"], y=top["player_name"] + " · " + top["club_name"], orientation="h",
         marker=dict(color=[DIVERGING[0][1] if x >= 0 else DIVERGING[-1][1] for x in top["value_index"]], cornerradius=4),
-        customdata=np.c_[top["fee"] / 1e6, top["fee_pct_position"], top["score_after"], top["minutes_after"]],
+        customdata=np.c_[top["fee"] / 1e6, top["fee_pct_position"], top["score_shrunk"], top["minutes_after"], top["confidence"]],
         hovertemplate="%{y}<br>€%{customdata[0]:.1f}m (fee percentile %{customdata[1]:.0f}) · performance %{customdata[2]:.0f}"
-                      "<br>%{customdata[3]:.0f} minutes<extra></extra>",
+                      "<br>%{customdata[3]:.0f} minutes · %{customdata[4]} confidence<extra></extra>",
         text=[f"{x:+.0f}" for x in top["value_index"]], textposition="outside", textfont=dict(color=TEXT_SECONDARY)))
     fig.add_vline(x=0, line=dict(color=TEXT_SECONDARY, width=1))
     fig.update_xaxes(title="Cost/performance index (performance percentile − fee percentile)")
     fig.update_traces(cliponaxis=False)
     fig.update_layout(height=720, margin=dict(l=280, r=60))
-    style(fig, "Best and worst value so far", f"12 highest and 12 lowest of n={len(v)}. Blue: performing above the price tier; red: below. {note}")
+    style(fig, "Best and worst value so far", f"12 highest and 12 lowest of n={len(v)}. Blue: performing above the price tier; red: below. "
+          f"Uses the score shrunk toward last season. {note}")
     export(fig, out, "04_value_ranking")
 
     # 5. Variação mediana dos percentis do perfil, por posição.
@@ -492,8 +587,11 @@ def charts(df: pd.DataFrame, team: pd.DataFrame, changes: pd.DataFrame, s: dict,
     labels = t["player_name"] + " · " + t["club_name"]
     fig.add_trace(go.Scatter(x=t["ppg_without"], y=labels, mode="markers", name="Without him", marker=dict(color=MUTED, size=10),
                              customdata=t["matches_without"], hovertemplate="%{y}<br>Without: %{x:.2f} points per match (%{customdata} matches)<extra></extra>"))
+    interval = [f"{lo:+.2f} to {hi:+.2f}" if pd.notna(lo) else "n/a (under 2 matches on a side)" for lo, hi in zip(t["ppg_difference_low"], t["ppg_difference_high"])]
     fig.add_trace(go.Scatter(x=t["ppg_with"], y=labels, mode="markers", name="With him", marker=dict(color=ACCENT, size=11, line=dict(width=2, color="white")),
-                             customdata=t["matches_with"], hovertemplate="%{y}<br>With: %{x:.2f} points per match (%{customdata} matches)<extra></extra>"))
+                             customdata=np.c_[t["matches_with"], interval],
+                             hovertemplate="%{y}<br>With: %{x:.2f} points per match (%{customdata[0]} matches)"
+                                           "<br>80% interval of the difference: %{customdata[1]}<extra></extra>"))
     fig.update_xaxes(title="Team points per league match since his arrival", range=[-0.1, 3.1])
     fig.update_layout(height=max(420, 22 * len(t) + 160), margin=dict(l=280))
     style(fig, "Team results with and without each signing", f"n={len(t)} signings with at least one match on each side. With = played any minutes. "
@@ -505,14 +603,14 @@ def charts(df: pd.DataFrame, team: pd.DataFrame, changes: pd.DataFrame, s: dict,
 
 
 def summary_markdown(s: dict) -> str:
-    df, table, team, rules, prog = s["df"], s["table"], s["team"], s["rules"], s["season"]
+    df, team, rules, prog = s["df"], s["team"], s["rules"], s["season"]
     counts = df["status"].value_counts()
     q = df[df["qualified"]]
     v = df[df["value_index"].notna()].sort_values("value_index", ascending=False)
     both = q[q["score_before"].notna() & q["score_after"].notna()]
     out_model = df[df["model_exclusion"].notna()]
     lines = [
-        f"# Phase 5: performance at the new club (summary)",
+        "# Phase 5: performance at the new club (summary)",
         "",
         "Generated by `uv run main.py performance` from `data/processed` and the cached 2026/27 tables in `data/interim` (offline). "
         "It runs again after each weekly refresh. Charts are in this folder as `.html` (iframe fragment) and `.json` (Plotly).",
@@ -535,6 +633,14 @@ def summary_markdown(s: dict) -> str:
         f"{counts.get('no_minutes', 0)} have not played a league minute for the buying club, and {counts.get('playing_elsewhere', 0)} "
         "are playing for another club since the transfer (loaned back or out after the purchase).",
         "- Per 90 numbers on a few hundred minutes swing a lot with one goal or one good match. Treat every number here as provisional.",
+        f"- **Shrinkage:** each 2026/27 per 90 metric is pulled toward the season before, `(minutes × now + k × before) / (minutes + k)` with "
+        f"k = {rules['shrinkage_minutes']} minutes (`phase5.shrinkage_minutes`). At {rules['shrinkage_minutes']} minutes now and before count half each. "
+        "The cost/performance index uses the shrunk score; `score_after` and `value_index_raw` keep the unshrunk version.",
+        "- **Confidence** by minutes at the new club: "
+        + ", ".join(f"{label} {int((df['confidence'] == label).sum())}" for label in ["high", "medium", "low"])
+        + " (low under 900, medium 900–1800, high over 1800).",
+        f"- **History:** this run is saved as snapshot {s['snapshot']['snapshot_date'].max()} in `history/` and `history.csv` "
+        f"({s['snapshot']['snapshot_date'].nunique()} snapshot(s) so far).",
         "",
         "## Before and after",
         "Each metric gets a percentile against the same reference as phase 3 (bought players of the same position with ≥900 league minutes the season before), "
@@ -554,16 +660,16 @@ def summary_markdown(s: dict) -> str:
         "Positive: performing above the price tier; negative: below. Needs a known fee and the minimum sample; the 17 unknown fees stay out of it. "
         "`fee_per_score_point` (fee ÷ score) and phase 4's verdict are in the table next to it.",
         "",
-        "| # | Player | Buyer | Fee | Minutes | Score | Fee pct. | Index | Phase 4 |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| # | Player | Buyer | Fee | Minutes | Confidence | Score (shrunk) | Fee pct. | Index | Phase 4 |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     def _row(i, r):
         verdict = r.verdict if isinstance(r.verdict, str) else "—"
-        return f"| {i} | {r.player_name} | {r.club_name} | {_money(r.fee)} | {r.minutes_after:.0f} | {r.score_after:.0f} | {r.fee_pct_position:.0f} | {r.value_index:+.0f} | {verdict} |"
+        return f"| {i} | {r.player_name} | {r.club_name} | {_money(r.fee)} | {r.minutes_after:.0f} | {r.confidence} | {r.score_shrunk:.0f} | {r.fee_pct_position:.0f} | {r.value_index:+.0f} | {verdict} |"
     for i, r in enumerate(v.head(10).itertuples(), 1):
         lines.append(_row(i, r))
     if len(v) > 10:
-        lines += ["", "Lowest:", "", "| # | Player | Buyer | Fee | Minutes | Score | Fee pct. | Index | Phase 4 |", "|---|---|---|---|---|---|---|---|---|"]
+        lines += ["", "Lowest:", "", "| # | Player | Buyer | Fee | Minutes | Confidence | Score (shrunk) | Fee pct. | Index | Phase 4 |", "|---|---|---|---|---|---|---|---|---|---|"]
         for i, r in list(enumerate(v.itertuples(), 1))[-10:][::-1]:
             lines.append(_row(i, r))
     if v["verdict"].notna().any():
@@ -575,13 +681,16 @@ def summary_markdown(s: dict) -> str:
         "## Team results with and without the player",
         "Points, goal difference and xG difference per league match of the buying club since the transfer date, split by whether the player played. "
         f"{len(t)} signings have at least one match on each side so far; most have one or two, so this is a description, not an effect "
-        "(the opponent, injuries and rotation all differ between the two groups).",
+        "(the opponent, injuries and rotation all differ between the two groups). "
+        "With at least 2 matches on each side the table gives an 80% bootstrap interval for the differences (`ppg_difference_low`/`_high`, "
+        f"`xgd_difference_low`/`_high`); {int(team['ppg_difference_low'].notna().sum())} signings have one so far.",
         "",
         "## Files",
         "- `performance_2026.csv` / `.json`: every purchase with status, minutes, before/after per 90 (`<metric>_before`, `<metric>_after`) and their percentiles, "
         "profile scores, the index and phase 4's fair price.",
         "- `team_results_2026.csv` / `.json`: points, goal and xG difference per match with and without the player.",
         "- `metric_changes.csv`: median change in percentile per metric and position.",
+        "- `history.csv` and `history/performance_<date>.csv`: one snapshot per data date (last league result), to follow each signing through the season.",
         "",
         "## Limits",
         "- Understat match data does not split out penalties, so xG and goals include them (the season before used the same totals here).",
