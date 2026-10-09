@@ -26,6 +26,7 @@ A data analytics project that evaluates the players of the 2026 summer transfer 
 | Understat    | xG, xA, xGChain, xGBuildup, shots, key passes (top-5 leagues) |
 | Sofascore    | Defensive and possession metrics for every outfield player in the top-5 leagues (league matches only) |
 | UEFA ranking | Country coefficients from kassiesa.net (league-strength adjustment) |
+| ECB | Euro-area HICP, monthly (general inflation; used only to show spending in 2026 euros) |
 
 FBref lost its Opta data in January 2026 and ClubElo's API requires registration since September 2026, so neither is used by default.
 
@@ -35,7 +36,7 @@ FBref lost its Opta data in January 2026 and ClubElo's API requires registration
 2. Cleaning and integration: one table per purchase, metrics per 90 minutes, market inflation (done)
 3. Exploratory analysis with percentiles and player profiles (done)
 4. Ridge regression on log(fee) to estimate the "fair price", with Transfermarkt market value and the buying league as features and an 80% prediction interval (done)
-5. Performance monitoring throughout the 2026/27 season: before/after per 90, cost/performance index, team results with and without the player (in progress)
+5. Performance monitoring throughout the 2026/27 season: before/after per 90, cost/performance index, team results with and without the player (first version written, not merged yet)
 
 Rules set for the model:
 - Purchases with fewer than 900 league minutes in the season before (none at all included) stay out of the price model, but are still followed in phase 5.
@@ -64,7 +65,7 @@ Resulting samples: 1,253 purchases in the price model (1,086 for training, 2019 
 - [x] Phase 2 - Cleaning and integration (one table per purchase, `build` command)
 - [x] Phase 3 - Exploratory analysis (`eda` command)
 - [x] Phase 4 - Fair price model (`model` command)
-- [ ] Phase 5 - Performance in the new team (in progress)
+- [ ] Phase 5 - Performance in the new team (first version in PR #9, waiting for merge)
 - [ ] Phase 6 - Dashboard and communication
 
 ## Data collection (phase 1)
@@ -121,7 +122,9 @@ Writes `data/processed/purchases.parquet` (and `.csv`): one row per purchase (su
 uv run main.py eda                        # offline: reads data/processed/purchases.parquet
 ```
 
-Writes 17 Plotly charts (`.html` + `.json`), the tables behind them (`.csv`) and `summary.md` to `outputs/eda/`, and per-position percentiles to `data/processed/percentiles.parquet` for the model. Percentiles compare each purchase with price-model purchases in the same position with at least 900 league minutes the season before; purchases with fewer minutes also get one, flagged `low_minutes`. The correlation charts found 15 near-duplicate per-90 pairs, and the model keeps one of each.
+Writes 20 Plotly charts (`.html` + `.json`), the tables behind them (`.csv`) and `summary.md` to `outputs/eda/`, and per-position percentiles to `data/processed/percentiles.parquet` for the model. Percentiles compare each purchase with price-model purchases in the same position with at least 900 league minutes the season before; purchases with fewer minutes also get one, flagged `low_minutes`. The correlation charts found 15 near-duplicate per-90 pairs, and the model keeps one of each.
+
+Charts include fees and spending per summer, spending per summer in 2026 euros (`03b`, needs `collect --steps hicp` once), the age of purchases per summer (`06b`), fee against market value, age, origin league and position, summer 2026 spending by league and club, the 20 most expensive 2026 purchases (`12`) and the 20 biggest 2026 bargains against market value (`12b`), per-position radars and feature correlations.
 
 ## Fair-price model (phase 4)
 
@@ -130,7 +133,7 @@ uv run main.py build && uv run main.py eda   # tables and percentiles the model 
 uv run main.py model                          # offline: reads data/processed only
 ```
 
-A ridge regression on log(fixed fee in 2026 prices), trained on the 1,086 price-model purchases of 2019–2025 and applied to the 167 of summer 2026. Features come from an explicit list (`FEATURES` in `src/pechincha/model/fair_price.py`): Transfermarkt value before the transfer, age, league minutes, origin club's league position and origin league, position group, buying league and 16 per-position percentiles (one of each redundant pair from the EDA). Alpha is chosen by predicting each past summer from the others; the 80% interval comes from those out-of-sample errors. A fee above the interval is **overpaid**, below it a **bargain**.
+A ridge regression on log(fixed fee in 2026 prices), trained on the 1,086 price-model purchases of 2019–2025 and applied to the 167 of summer 2026. Features come from an explicit list (`FEATURES` in `src/pechincha/model/fair_price.py`): Transfermarkt value before the transfer, age (and its square), league minutes, origin club's league position and origin league, position group, buying league and 16 per-position percentiles (one of each redundant pair from the EDA). Alpha is chosen by predicting each past summer from the others; the 80% interval comes from those out-of-sample errors. A fee above the interval is **overpaid**, below it a **bargain**.
 
 - **Small sample:** about 1,100 purchases for ~30 features. Read each player's verdict with its interval.
 - **Market value carries most of the signal:** it alone explains 71% of the variance in log fee on unseen summers; the full model 77%. The stats add little on top, because Transfermarkt values already price them in.
