@@ -33,6 +33,7 @@ class Config:
     uefa: dict = field(default_factory=dict)
     price_model: dict = field(default_factory=dict)
     phase5: dict = field(default_factory=dict)
+    hicp: dict = field(default_factory=dict)
     root: Path = ROOT
 
     @property
@@ -73,5 +74,6 @@ def load_config(path: Path | None = None) -> Config:
         uefa=raw.get("uefa", {}),
         price_model=raw.get("price_model", {}),
         phase5=raw.get("phase5", {}),
+        hicp=raw.get("hicp", {}),
         root=path.parent,
     )

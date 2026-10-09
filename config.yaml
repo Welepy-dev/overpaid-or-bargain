@@ -75,6 +75,11 @@ phase5:
 uefa:
   ranking_url: https://kassiesa.net/uefa/data/method5/crank{year}.html
 
+# IPCH da zona euro (BCE, índice mensal, todos os itens): inflação geral usada
+# só na EDA para mostrar o gasto total em euros de 2026 (gráfico 03b).
+hicp:
+  url: https://data-api.ecb.europa.eu/service/data/ICP/M.U2.N.000000.4.INX?format=csvdata&startPeriod=2015-01
+
 http:
   cache_dir: data/raw
   min_interval_seconds: 3.0    # intervalo mínimo entre pedidos ao mesmo domínio

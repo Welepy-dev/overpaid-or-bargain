@@ -111,17 +111,25 @@ def test_spearman_ignores_missing():
 
 def test_run_writes_charts_tables_and_percentiles(cfg):
     save(purchases(), cfg.root / "data" / "processed" / "purchases.parquet")
+    months = pd.period_range("2019-01", "2026-09", freq="M")
+    save(pd.DataFrame({"period": months.astype(str), "year": months.year, "month": months.month,
+                       "hicp": 100 + np.arange(len(months)) * 0.25}), cfg.interim_dir / "hicp_monthly.parquet")
     summary = eda.run(cfg)
 
     out = cfg.root / "outputs" / "eda"
     charts = sorted(p.stem for p in out.glob("*.html"))
-    assert len(charts) == 17
+    assert len(charts) == 20 and {"03b_spend_by_summer_real", "06b_age_by_summer", "12b_top_bargains_2026"} <= set(charts)
     assert {p.stem for p in out.glob("*.json")} == set(charts)
     assert "cdn.plot.ly" in (out / "01_fee_distribution.html").read_text(encoding="utf-8")
-    for table in ["fees_by_summer", "minutes_thresholds", "purchases_2026_by_fee", "spend_2026_by_league", "spend_2026_by_club",
+    for table in ["fees_by_summer", "ages_by_summer", "minutes_thresholds", "purchases_2026_by_fee", "bargains_2026", "spend_2026_by_league", "spend_2026_by_club",
                   "fee_by_age", "feature_correlations", "redundant_metric_pairs"]:
         assert (out / f"{table}.csv").exists(), table
     assert "2026" in (out / "summary.md").read_text(encoding="utf-8")
+    fees = pd.read_csv(out / "fees_by_summer.csv")
+    assert (fees["total_fee_real_m"] > fees["total_fee_m"])[fees["summer"] < 2026].all()
+    assert (fees.loc[fees["summer"] == 2026, "hicp_deflator"] == 1).all()
+    bargains = pd.read_csv(out / "bargains_2026.csv")
+    assert len(bargains) and (bargains["discount_m"] > 0).all() and bargains["discount_m"].is_monotonic_decreasing
 
     pct = pd.read_parquet(cfg.root / "data" / "processed" / "percentiles.parquet")
     assert len(pct) == summary["n"] == 8 * 24
@@ -129,3 +137,12 @@ def test_run_writes_charts_tables_and_percentiles(cfg):
     assert "pct_ss_ballRecovery_p90" not in pct
     vals = pct.filter(like="pct_").stack().dropna()
     assert len(vals) and vals.between(0, 100).all()
+
+
+def test_run_without_hicp_skips_real_chart(cfg):
+    save(purchases(), cfg.root / "data" / "processed" / "purchases.parquet")
+    eda.run(cfg)
+    out = cfg.root / "outputs" / "eda"
+    assert not (out / "03b_spend_by_summer_real.html").exists()
+    assert "total_fee_real_m" not in pd.read_csv(out / "fees_by_summer.csv")
+    assert "No HICP file yet" in (out / "summary.md").read_text(encoding="utf-8")
