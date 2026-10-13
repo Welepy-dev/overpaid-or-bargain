@@ -138,7 +138,7 @@ def test_run_statuses_team_results_and_outputs(cfg):
 
     out = cfg.root / "outputs" / "performance"
     charts = sorted(p.stem for p in out.glob("*.html"))
-    assert charts == ["01_minutes_after", "02_score_before_after", "03_cost_vs_performance", "04_value_ranking", "05_metric_changes", "06_team_with_without"]
+    assert charts == ["01_minutes_after", "02_score_before_after", "03_cost_vs_performance", "04_value_ranking", "05_metric_changes", "06_team_with_without", "07_season_evolution"]
     assert {p.stem for p in out.glob("*.json")} == set(charts) | {"performance_2026", "team_results_2026"}
     for table in ["performance_2026", "team_results_2026", "metric_changes"]:
         assert (out / f"{table}.csv").exists(), table
@@ -177,6 +177,9 @@ def test_run_statuses_team_results_and_outputs(cfg):
     assert r[0]["confidence"] == "low" and pd.notna(r[0]["score_shrunk"]) and pd.notna(r[0]["value_index_raw"])
     assert np.isnan(r[0]["ppg_difference_low"])  # só 1 jogo sem ele: sem intervalo
     assert {"score_shrunk", "confidence", "pct_us_xg_p90_shrunk", "ppg_difference_low"} <= set(table.columns)
+    # Intervalo da pontuação: 3 jogos iguais, por isso o intervalo fecha-se no próprio valor.
+    assert r[0]["score_shrunk_low"] <= r[0]["score_shrunk"] + 0.1 <= r[0]["score_shrunk_high"] + 0.2
+    assert pd.notna(r[0]["value_index_low"]) and pd.isna(r[1]["score_shrunk_low"])
 
     # Fotografia com a data do último resultado; correr outra vez substitui-a em vez de a repetir.
     hist = pd.read_csv(out / "history.csv")
@@ -184,3 +187,20 @@ def test_run_statuses_team_results_and_outputs(cfg):
     assert (out / "history" / "performance_2026-09-12.csv").exists()
     perf.run(cfg)
     assert len(pd.read_csv(out / "history.csv")) == 24
+
+
+def test_score_intervals_widen_with_uneven_matches():
+    df, cur, matches, *_ = scenario()
+    m = matches.copy()
+    # O jogador 0 marca 3 golos esperados num jogo e nada nos outros: o intervalo tem de abrir.
+    m.loc[(m["player_id"] == 1000) & (m["game_id"] == 1), ["xg", "shots", "xa", "key_passes", "xg_chain"]] = [3.0, 9, 1.0, 5, 3.0]
+    m.loc[(m["player_id"] == 1000) & (m["game_id"] != 1), ["xg", "shots", "xa", "key_passes", "xg_chain"]] = [0.0, 0, 0.0, 0, 0.0]
+    p = df.loc[[cur[0]]].copy()
+    p["position_group"] = "ATT"
+    p["qualified"] = True
+    p["understat_id_2026"] = 1000
+    p["understat_team"] = "Arsenal"
+    for metric in perf.SCORE_METRICS["ATT"]:
+        p[f"pct_{metric}_shrunk"] = 50.0
+    out = perf.score_intervals(p, df, m, shrinkage_minutes=900)
+    assert out["score_shrunk_high"].iloc[0] - out["score_shrunk_low"].iloc[0] > 5
