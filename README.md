@@ -65,7 +65,9 @@ Resulting samples: 1,253 purchases in the price model (1,086 for training, 2019 
 - [x] Phase 2 - Cleaning and integration (one table per purchase, `build` command)
 - [x] Phase 3 - Exploratory analysis (`eda` command)
 - [x] Phase 4 - Fair price model (`model` command)
-- [ ] Phase 5 - Performance in the new team (first version: `performance` command, updated weekly through the season)
+- [ ] Phase 5 - Performance in the new team (`performance` command, code complete; updated weekly through the season)
+  - [ ] First real ranking review around matchday 10-12, when most starters pass 900 minutes
+  - [ ] End-of-season wrap-up (May 2027): final ranking and a check of the phase 4 verdicts against performance
 - [ ] Phase 6 - Dashboard and communication
 
 ## Data collection (phase 1)
