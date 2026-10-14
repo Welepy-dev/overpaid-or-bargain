@@ -70,6 +70,7 @@ SEASON = 2026
 DEFAULT_MIN_MINUTES = 270
 DEFAULT_MIN_SHARE = 0.3
 DEFAULT_SHRINKAGE_MINUTES = 900
+DEFAULT_MIN_MINUTES_RANKING = 900
 CONFIDENCE_BINS = [(1800, "high"), (900, "medium"), (0, "low")]  # minutos no clube novo (acima de)
 BOOTSTRAP_SAMPLES = 2000
 SCORE_BOOTSTRAP_SAMPLES = 500
@@ -85,6 +86,11 @@ SS_RATIOS = ["ss_pass_accuracy", "ss_dribble_success", "ss_duels_won_pct", "ss_r
 COMPARE_METRICS = ([f"us_{c}_p90" for c in US_STATS] + [f"ss_{c}_p90" for c in build.SOFASCORE_PER90 if c != "ballRecovery"] + SS_RATIOS)
 # Pontuação de desempenho: média dos percentis do perfil de cada posição (os do radar da Fase 3).
 SCORE_METRICS = {pos: [m.replace("us_np_xg_p90", "us_xg_p90") for m in ms] for pos, ms in PROFILE_METRICS.items()}
+# Golos e assistências contam na pontuação (decisão de 14/10): o radar da Fase 3 só tem
+# as métricas mais estáveis (xG, remates), mas é por golos que uma contratação é julgada.
+# O shrinkage segura a variação das primeiras semanas.
+SCORE_METRICS["ATT"] = SCORE_METRICS["ATT"] + ["us_goals_p90", "us_assists_p90"]
+SCORE_METRICS["MID"] = SCORE_METRICS["MID"] + ["us_assists_p90"]
 METRIC_LABELS = {**METRIC_LABELS, "us_xg_p90": "xG"}
 
 STATUS_LABELS = {
@@ -109,7 +115,7 @@ def run(cfg: Config) -> dict:
     fair_path = processed / "fair_price.parquet"
     fair = load(fair_path) if fair_path.exists() else None
     rules = {"min_minutes_after": DEFAULT_MIN_MINUTES, "min_share_of_team_minutes": DEFAULT_MIN_SHARE,
-             "shrinkage_minutes": DEFAULT_SHRINKAGE_MINUTES, **cfg.phase5}
+             "shrinkage_minutes": DEFAULT_SHRINKAGE_MINUTES, "min_minutes_ranking": DEFAULT_MIN_MINUTES_RANKING, **cfg.phase5}
 
     games = team_games(schedule)
     df = performance_table(purchases, clubs, matches, games, sofa, fair, rules)
@@ -274,6 +280,8 @@ def performance_table(purchases: pd.DataFrame, clubs: pd.DataFrame, matches: pd.
         [df["minutes_after"] >= df["min_minutes_required"], df["minutes_after"] > 0, df["club_elsewhere"].notna()],
         ["qualified", "under_min_minutes", "playing_elsewhere"], "no_minutes")
     df["qualified"] = df["status"] == "qualified"
+    # Os rankings (índice custo/desempenho, gráficos 03, 04 e 07) pedem mais minutos do que a amostra mínima.
+    df["ranked"] = df["qualified"] & (df["minutes_after"] >= rules.get("min_minutes_ranking", DEFAULT_MIN_MINUTES_RANKING))
     df["confidence"] = confidence(df["minutes_after"])
 
     df = df.join(scores(purchases, df, rules["shrinkage_minutes"]))
@@ -368,7 +376,8 @@ def cost_performance(df: pd.DataFrame, score: str = "score_shrunk") -> pd.DataFr
 
     O percentil do preço é contra as compras de 2026 da mesma posição com preço
     conhecido. Positivo: rende acima do que custou, comparado com os outros
-    comprados para a mesma posição; negativo: abaixo. Só com a amostra mínima.
+    comprados para a mesma posição; negativo: abaixo. Só para quem entra nos
+    rankings (``ranked``: ``phase5.min_minutes_ranking`` minutos no clube novo).
     O desempenho é a pontuação com shrinkage (``score``); ``value_index_raw`` usa
     a de 2026/27 sem ela.
     """
@@ -376,7 +385,7 @@ def cost_performance(df: pd.DataFrame, score: str = "score_shrunk") -> pd.DataFr
     fee_pct = pd.Series(np.nan, index=df.index)
     for pos, g in df[known].groupby("position_group"):
         fee_pct.loc[g.index] = (g["fee"].rank(method="average") - 0.5) / len(g) * 100
-    ok = df["qualified"] & known
+    ok = (df["ranked"] if "ranked" in df else df["qualified"]) & known
     index = (df[score] - fee_pct).where(ok)
     raw = (df["score_after"] - fee_pct).where(ok)
     per_point = (df["fee"] / df[score].where(df[score] > 0)).where(ok)
@@ -503,7 +512,7 @@ def output_table(df: pd.DataFrame) -> pd.DataFrame:
     t = df.sort_values(["qualified", "value_index", "minutes_after"], ascending=[False, False, False]).copy()
     t["buying_league"] = t["league"].map(LEAGUE_NAMES)
     base = ["player_name", "club_name", "buying_league", "other_club_name", "position_group", "position", "age_at_transfer", "fee", "fee_known",
-            "fair_price", "fee_vs_fair", "verdict", "status", "confidence", "minutes_after", "min_minutes_required", "appearances_after", "starts_after",
+            "fair_price", "fee_vs_fair", "verdict", "status", "ranked", "confidence", "minutes_after", "min_minutes_required", "appearances_after", "starts_after",
             "team_matches_since_arrival", "minutes_before", "club_elsewhere", "ss_mixed_clubs", "score_before", "score_after", "score_shrunk", "score_change",
             "score_shrunk_low", "score_shrunk_high", "fee_pct_position", "value_index", "value_index_low", "value_index_high", "value_index_raw", "fee_per_score_point", "matches_with", "matches_without", "ppg_with", "ppg_without",
             "ppg_difference", "ppg_difference_low", "ppg_difference_high", "xgd_per_match_with", "xgd_per_match_without", "xgd_difference",
@@ -599,7 +608,7 @@ def charts(df: pd.DataFrame, team: pd.DataFrame, changes: pd.DataFrame, s: dict,
     fig.add_trace(go.Scatter(x=[0, 100], y=[0, 100], mode="lines", line=dict(color=MUTED, dash="dot", width=1.5), name="Performing at price", hoverinfo="skip"))
     fig.update_xaxes(title="Fee percentile among summer-2026 purchases of the same position", range=[0, 100])
     fig.update_yaxes(title="Performance score in 2026/27, shrunk toward last season (mean percentile)", range=[0, 100])
-    style(fig, "Cost against performance so far", f"n={len(v)} with a known fee and enough minutes. Above the line: performing above the price tier. "
+    style(fig, "Cost against performance so far", f"n={len(v)} with a known fee and at least {s['rules']['min_minutes_ranking']} minutes. Above the line: performing above the price tier. "
           f"Per 90 stats are pulled toward last season with k={s['rules']['shrinkage_minutes']} minutes. {note}")
     export(fig, out, "03_cost_vs_performance")
 
@@ -618,7 +627,7 @@ def charts(df: pd.DataFrame, team: pd.DataFrame, changes: pd.DataFrame, s: dict,
     fig.update_xaxes(title="Cost/performance index (performance percentile − fee percentile)")
     fig.update_traces(cliponaxis=False)
     fig.update_layout(height=720, margin=dict(l=280, r=60))
-    style(fig, "Best and worst value so far", f"12 highest and 12 lowest of n={len(v)}. Blue: performing above the price tier; red: below. "
+    style(fig, "Best and worst value so far", f"12 highest and 12 lowest of n={len(v)} with at least {s['rules']['min_minutes_ranking']} minutes. Blue: performing above the price tier; red: below. "
           f"Uses the score shrunk toward last season; whiskers are 80% bootstrap intervals over matches (Understat metrics only). {note}")
     export(fig, out, "04_value_ranking")
 
@@ -665,6 +674,13 @@ def evolution_chart(history: pd.DataFrame, df: pd.DataFrame, out: Path, note: st
     h = history.merge(df[KEY + ["fee"]], on=KEY, how="left")
     h = h[h["value_index"].notna()]
     if h.empty:
+        # Ninguém nos rankings ainda (início da época): o gráfico sai vazio, com a explicação.
+        fig = go.Figure()
+        fig.add_annotation(text="No signing has enough minutes for the ranking yet", showarrow=False, font=dict(color=TEXT_SECONDARY, size=14))
+        fig.update_xaxes(visible=False)
+        fig.update_yaxes(visible=False)
+        style(fig, "How the most expensive signings are tracking", f"Fills in once signings reach the ranking minimum. {note}")
+        export(fig, out, "07_season_evolution")
         return
     latest = h[h["snapshot_date"] == h["snapshot_date"].max()]
     keys = latest.nlargest(n, "fee")[KEY]
@@ -687,7 +703,7 @@ def evolution_chart(history: pd.DataFrame, df: pd.DataFrame, out: Path, note: st
     fig.update_layout(height=560, margin=dict(r=180))
     first = "One snapshot so far: lines appear as the weeks add up. " if len(dates) == 1 else ""
     style(fig, "How the most expensive signings are tracking", f"Cost/performance index of the {h[KEY].drop_duplicates().shape[0]} most expensive "
-          f"signings with enough minutes, one point per weekly run ({len(dates)} so far: {dates[0]} to {dates[-1]}). {first}Colour = position. {note}")
+          f"signings in the ranking (900+ minutes), one point per weekly run ({len(dates)} so far: {dates[0]} to {dates[-1]}). {first}Colour = position. {note}")
     export(fig, out, "07_season_evolution")
 
 
@@ -753,7 +769,11 @@ def summary_markdown(s: dict) -> str:
         "",
         "## Cost/performance index",
         "Index = performance score in 2026/27 minus the fee's percentile among summer-2026 purchases of the same position. "
-        "Positive: performing above the price tier; negative: below. Needs a known fee and the minimum sample; the 17 unknown fees stay out of it. "
+        "Positive: performing above the price tier; negative: below. Needs a known fee and at least "
+        f"{rules['min_minutes_ranking']} league minutes for the buying club (`phase5.min_minutes_ranking`, about 10 full matches, where per 90 numbers "
+        f"settle); {int(df['qualified'].sum() - df['ranked'].sum())} signings with the minimum sample but fewer minutes keep their score and confidence "
+        "label in the table without an index. The 17 unknown fees stay out of it. "
+        "The attacker score includes goals and assists per 90 and the midfielder score assists per 90, on top of the phase 3 profile. "
         "`fee_per_score_point` (fee ÷ score) and phase 4's verdict are in the table next to it.",
         "",
         "| # | Player | Buyer | Fee | Minutes | Confidence | Score (shrunk) | Fee pct. | Index | Phase 4 |",

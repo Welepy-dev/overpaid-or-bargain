@@ -134,6 +134,7 @@ def test_run_statuses_team_results_and_outputs(cfg):
     save(sofa, inter / "sofascore_league_player_seasons.parquet")
     save(understat, inter / "understat_player_seasons.parquet")
     save(tm_clubs, inter / "tm_top5_clubs.parquet")
+    cfg.phase5["min_minutes_ranking"] = 270  # o cenário só tem 3 jogos; o índice precisa de entrar
     summary = perf.run(cfg)
 
     out = cfg.root / "outputs" / "performance"
@@ -204,3 +205,17 @@ def test_score_intervals_widen_with_uneven_matches():
         p[f"pct_{metric}_shrunk"] = 50.0
     out = perf.score_intervals(p, df, m, shrinkage_minutes=900)
     assert out["score_shrunk_high"].iloc[0] - out["score_shrunk_low"].iloc[0] > 5
+
+
+def test_ranking_needs_min_minutes_ranking():
+    df = pd.DataFrame({"position_group": ["ATT"] * 3, "fee_known": [True] * 3, "fee": [1e6, 2e6, 3e6], "score_after": [80.0, 50.0, 20.0],
+                       "score_shrunk": [70.0, 50.0, 30.0], "qualified": [True] * 3, "ranked": [True, False, True]})
+    out = perf.cost_performance(df)
+    assert pd.notna(out["value_index"].iloc[0]) and pd.isna(out["value_index"].iloc[1]) and pd.notna(out["value_index"].iloc[2])
+    # O percentil do preço continua a contar com todas as compras da posição.
+    assert out["fee_pct_position"].iloc[1] == pytest.approx(50.0)
+
+
+def test_goals_and_assists_count_in_the_score():
+    assert {"us_goals_p90", "us_assists_p90"} <= set(perf.SCORE_METRICS["ATT"])
+    assert "us_assists_p90" in perf.SCORE_METRICS["MID"]
