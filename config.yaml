@@ -73,6 +73,9 @@ phase5:
   # Shrinkage: as métricas por 90 de 2026/27 são puxadas para as da época
   # anterior com o peso de k minutos (com k minutos agora, contam metade cada).
   shrinkage_minutes: 900
+  # Minutos no clube novo para entrar nos rankings (índice custo/desempenho,
+  # gráficos 03, 04 e 07); abaixo disso a compra fica só na tabela (14/10/2026).
+  min_minutes_ranking: 900
 
 # Ranking UEFA de países (força das ligas de origem), kassiesa.net.
 uefa:
