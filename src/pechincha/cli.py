@@ -1,10 +1,11 @@
-"""Linha de comandos: ``uv run main.py collect [--steps ...] [--current-only] [--no-refresh]``, ``build``, ``eda``, ``model`` e ``performance``."""
+"""Linha de comandos: ``uv run main.py collect [--steps ...] [--current-only] [--no-refresh]``, ``build``, ``eda``, ``model``, ``performance`` e ``export [--portfolio DIR]``."""
 
 from __future__ import annotations
 
 import argparse
 import logging
 from dataclasses import replace
+from pathlib import Path
 
 from .config import load_config
 from .pipeline import OPTIONAL_STEPS, STEPS, run
@@ -21,6 +22,8 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("eda", help="Fase 3: análise exploratória (offline, só lê data/processed)")
     sub.add_parser("model", help="Fase 4: modelo de preço justo e ranking (offline, só lê data/processed)")
     sub.add_parser("performance", help="Fase 5: desempenho no clube novo em 2026/27 (offline, lê data/processed e data/interim)")
+    export = sub.add_parser("export", help="dados da Fase 5 para o artigo do portfólio (offline, lê outputs/performance)")
+    export.add_argument("--portfolio", type=Path, help="clone do portfólio (por omissão, ../portfolio ao lado deste repositório)")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
 
@@ -48,3 +51,7 @@ def main(argv: list[str] | None = None) -> None:
         from . import performance
 
         performance.run(cfg)
+    elif args.command == "export":
+        from . import export
+
+        export.run(cfg, args.portfolio)

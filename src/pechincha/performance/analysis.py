@@ -138,6 +138,7 @@ def run(cfg: Config) -> dict:
     changes = metric_changes(df)
     changes.to_csv(out / "metric_changes.csv", index=False)
     season = season_progress(games)
+    season.to_csv(out / "season_progress.csv", index=False)
     snapshot = save_snapshot(table, out, season["last_result"].max())
 
     summary = {"rules": rules, "season": season, "df": df, "table": table, "team": team, "changes": changes, "snapshot": snapshot}
@@ -806,6 +807,7 @@ def summary_markdown(s: dict) -> str:
         "profile scores, the index and phase 4's fair price.",
         "- `team_results_2026.csv` / `.json`: points, goal and xG difference per match with and without the player.",
         "- `metric_changes.csv`: median change in percentile per metric and position.",
+        "- `season_progress.csv`: matches played per team and last result, per league.",
         "- `history.csv` and `history/performance_<date>.csv`: one snapshot per data date (last league result), to follow each signing through the season; "
         "chart 07 shows the index of the 15 most expensive signings across the snapshots.",
         "",
