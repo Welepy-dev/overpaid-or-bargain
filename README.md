@@ -90,6 +90,9 @@ Player details for summers up to 2025 come from the public dump; only players mi
 
 The summer window is closed, so transfers and Transfermarkt details are final. Each week only the 2026/27 season stats are refreshed:
 `uv run main.py collect --current-only --steps understat sofascore_leagues` (about 5 Understat and ~30 Sofascore requests, under 2 minutes; no Transfermarkt requests), followed by `uv run main.py performance` (phase 5, offline, from what is in the cache).
+Then it publishes the phase 5 numbers to the portfolio article: `uv run main.py export` writes three small JSON files into the portfolio clone, and the script commits and pushes them, so the site redeploys with the new charts.
+
+The publish step expects the [portfolio](https://github.com/Welepy-dev/portfolio) cloned next to this repository (`../portfolio`, or set `PORTFOLIO_DIR`), on `main`, with push access. It pulls first, commits only `public/data/overpaid-or-bargain/`, skips the commit when nothing changed, and leaves other local changes alone. It is skipped when phase 5 fails, and a failed pull or push is logged and fails the run.
 
 ```bash
 ./scripts/install_weekly.sh                   # systemd user timer: Mondays at 09:00
@@ -163,7 +166,14 @@ Follows all 222 summer-2026 purchases, including the 55 left out of the price mo
 - **Team results with and without the player:** points, goal difference and xG difference per league match since the transfer date, split by whether he played. With at least 2 matches on each side, the differences get an 80% bootstrap interval over the matches. Very few matches per side: a description, not an effect.
 - **Sources:** Understat match by match (so only matches for the buying club count; players with no Understat link are matched by name in the new squad) and Sofascore season totals per league and team. Players who played for another club in the same league earlier this season have no Sofascore metrics for 2026/27 (the total mixes both clubs). Understat matches do not split out penalties, so xG and goals include them.
 
-Writes `outputs/performance/`: `performance_2026.csv`/`.json` (one row per purchase), `team_results_2026.csv`/`.json`, `metric_changes.csv`, `history.csv` and `history/`, seven Plotly charts (`.html` + `.json`) and `summary.md`; and `data/processed/performance.parquet`.
+Writes `outputs/performance/`: `performance_2026.csv`/`.json` (one row per purchase), `team_results_2026.csv`/`.json`, `metric_changes.csv`, `history.csv` and `history/`, seven Plotly charts (`.html` + `.json`) `season_progress.csv` and `summary.md`; and `data/processed/performance.parquet`.
+
+```bash
+uv run main.py export                         # offline: outputs/performance -> ../portfolio/public/data/overpaid-or-bargain/
+uv run main.py export --portfolio ~/code/portfolio
+```
+
+Writes the data behind the article's live charts, nothing else: `meta.json` (snapshot date, matches per team by league, counts by status), `ranking.json` (every ranked purchase with its index and 80% interval) and `evolution.json` (the index of the 15 most expensive ranked signings in every snapshot, as in chart 07). Fees are in millions of euros. The charts themselves are drawn on the site, in its colours.
 
 ## Repository structure
 
@@ -177,6 +187,7 @@ Writes `outputs/performance/`: `performance_2026.csv`/`.json` (one row per purch
 │   ├── eda/             # phase 3: percentiles and exploratory charts
 │   ├── model/           # phase 4: fair-price model and 2026 ranking
 │   ├── performance/     # phase 5: performance at the new club in 2026/27
+│   ├── export.py        # phase 5 data for the portfolio article
 │   ├── report/          # Plotly theme and export
 │   └── ingest/          # transfermarkt, tm_dump, understat, sofascore, uefa, hicp, clubelo
 ├── scripts/             # weekly refresh and its systemd timer
